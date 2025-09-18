@@ -1,6 +1,10 @@
+# streamlit_app.py
 import streamlit as st
 
-st.title("🎈 My new app")
-st.write(
-    "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
-)
+st.set_page_config(page_title="FEVS-style Dashboard", layout="wide")
+
+# Only register the Overview page
+overview = st.Page("pages/overview.py", title="Overview", icon="📊")
+
+nav = st.navigation({"Main": [overview]})
+nav.run()
