@@ -15,6 +15,11 @@ strength = st.Page(
     title="Strength Areas",
     icon="💪",
 )
+weakness = st.Page(
+    "pages/weakness_areas.py",
+    title="Weakness Areas",
+    icon="🩹",
+)
 
-nav = st.navigation({"Main": [overview, dimensions, strength]})
+nav = st.navigation({"Main": [overview, dimensions, strength, weakness]})
 nav.run()

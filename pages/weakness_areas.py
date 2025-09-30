@@ -1,4 +1,4 @@
-"""Strength Areas page."""
+"""Weakness Areas page."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -10,9 +10,9 @@ import streamlit as st
 from fevs_io import load_excel
 from fevs_processing import compute_question_scores, prepare_question_metadata
 
-st.set_page_config(page_title="Strength Areas · FEVS-style Dashboard", layout="wide")
+st.set_page_config(page_title="Weakness Areas · FEVS-style Dashboard", layout="wide")
 
-st.title("Strength Areas")
+st.title("Weakness Areas")
 
 
 @st.cache_data(show_spinner=False)
@@ -96,96 +96,96 @@ scores_with_meta = scores.merge(
 )
 scores_with_meta = scores_with_meta.dropna(subset=["Index"])
 
-if scores_with_meta.empty:
+if scores_with_meta.empty():
     st.info("No index data available after applying filters.")
     st.stop()
 
-# Determine strongest index based on positive perception across the selected years.
-index_positive = (
-    scores_with_meta.groupby(["Index", "FY"])["Positive"].mean().reset_index()
+# Determine weakest index based on negative perception across the selected years.
+index_negative = (
+    scores_with_meta.groupby(["Index", "FY"])["Negative"].mean().reset_index()
 )
-index_rank = index_positive.groupby("Index")["Positive"].mean().reset_index(name="AveragePositive")
+index_rank = index_negative.groupby("Index")["Negative"].mean().reset_index(name="AverageNegative")
 
 if index_rank.empty:
     st.info("No index-level scores found.")
     st.stop()
 
-top_index_row = index_rank.sort_values("AveragePositive", ascending=False).iloc[0]
-top_index = top_index_row["Index"]
-top_index_scores = index_positive[index_positive["Index"] == top_index].sort_values("FY")
+weak_index_row = index_rank.sort_values("AverageNegative", ascending=False).iloc[0]
+weak_index = weak_index_row["Index"]
+weak_index_scores = index_negative[index_negative["Index"] == weak_index].sort_values("FY")
 
-top_min = float(top_index_scores["Positive"].min())
-top_max = float(top_index_scores["Positive"].max())
-top_avg = float(top_index_row["AveragePositive"])
+weak_min = float(weak_index_scores["Negative"].min())
+weak_max = float(weak_index_scores["Negative"].max())
+weak_avg = float(weak_index_row["AverageNegative"])
 
-st.markdown(f"### {top_index}")
+st.markdown(f"### {weak_index}")
 
 metric_cols = st.columns(len(selected_years))
 for col, year in zip(metric_cols, selected_years):
-    year_value = top_index_scores.loc[top_index_scores["FY"] == year, "Positive"]
+    year_value = weak_index_scores.loc[weak_index_scores["FY"] == year, "Negative"]
     display = f"{float(year_value.iloc[0]):.0f}%" if not year_value.empty else "—"
     with col:
         st.metric(label=str(year), value=display)
 
 summary_cols = st.columns(2)
 with summary_cols[0]:
-    st.metric("Average Positive", f"{top_avg:.1f}%")
+    st.metric("Average Negative", f"{weak_avg:.1f}%")
 threshold_label = (
-    f"{len(selected_years)}-Year Positive Threshold"
+    f"{len(selected_years)}-Year Negative Threshold"
     if len(selected_years) > 1
-    else "Positive Threshold"
+    else "Negative Threshold"
 )
 with summary_cols[1]:
-    st.metric(threshold_label, f"{top_min:.1f}%")
+    st.metric(threshold_label, f"{weak_min:.1f}%")
 
-chart_data = top_index_scores.rename(columns={"Positive": "Positive %"})
+chart_data = weak_index_scores.rename(columns={"Negative": "Negative %"})
 chart = (
     alt.Chart(chart_data)
     .mark_line(point=True)
     .encode(
         x=alt.X("FY:O", title="Fiscal Year"),
-        y=alt.Y("Positive %:Q", title="Positive %", scale=alt.Scale(domain=[0, 100])),
-        tooltip=["FY:O", alt.Tooltip("Positive %:Q", format=".1f")],
+        y=alt.Y("Negative %:Q", title="Negative %", scale=alt.Scale(domain=[0, 100])),
+        tooltip=["FY:O", alt.Tooltip("Negative %:Q", format=".1f")],
     )
 )
 st.altair_chart(chart, use_container_width=True)
 
 year_descriptions = ", ".join(
-    f"{int(row.FY)}: {row.Positive:.0f}%" for row in top_index_scores.itertuples()
+    f"{int(row.FY)}: {row.Negative:.0f}%" for row in weak_index_scores.itertuples()
 )
 st.caption(
-    f"The {top_index} remained the strongest index because its positive perception never fell "
-    f"below {top_min:.0f}% and peaked at {top_max:.0f}% across the selected years "
-    f"({year_descriptions})."
+    f"The {weak_index} emerges as the weakest index because its negative perception never "
+    f"dropped below {weak_min:.0f}% and reached up to {weak_max:.0f}% across the selected "
+    f"years ({year_descriptions})."
 )
 
 st.markdown("#### Sub-Index trends")
 
-metric_columns = ["Positive"]
-if perception_column != "Positive":
+metric_columns = ["Negative"]
+if perception_column != "Negative":
     metric_columns.append(perception_column)
 
 subindex_scores = (
-    scores_with_meta[scores_with_meta["Index"] == top_index]
+    scores_with_meta[scores_with_meta["Index"] == weak_index]
     .groupby(["SubIndex", "FY"])[metric_columns]
     .mean()
     .reset_index()
 )
 
 if subindex_scores.empty:
-    st.info("No sub-index data available for the strongest index.")
+    st.info("No sub-index data available for the weakest index.")
 else:
     sub_chart = (
-        alt.Chart(subindex_scores.rename(columns={"Positive": "Positive %"}))
+        alt.Chart(subindex_scores.rename(columns={"Negative": "Negative %"}))
         .mark_line(point=True)
         .encode(
             x=alt.X("FY:O", title="Fiscal Year"),
-            y=alt.Y("Positive %:Q", title="Positive %", scale=alt.Scale(domain=[0, 100])),
+            y=alt.Y("Negative %:Q", title="Negative %", scale=alt.Scale(domain=[0, 100])),
             color=alt.Color("SubIndex:N", title="Sub-Index"),
             tooltip=[
                 "SubIndex:N",
                 "FY:O",
-                alt.Tooltip("Positive %:Q", format=".1f"),
+                alt.Tooltip("Negative %:Q", format=".1f"),
             ],
         )
     )
@@ -193,7 +193,7 @@ else:
 
     summary_rows: list[dict[str, object]] = []
     subindex_snapshot: dict[str, dict[str, object]] = {}
-    for sub_index, subset in scores_with_meta[scores_with_meta["Index"] == top_index].groupby(
+    for sub_index, subset in scores_with_meta[scores_with_meta["Index"] == weak_index].groupby(
         "SubIndex"
     ):
         row: dict[str, object] = {"Sub-Index": sub_index}
@@ -220,24 +220,24 @@ else:
             column_config=column_config,
         )
 
-st.markdown("#### Questions contributing to the strength")
+st.markdown("#### Questions contributing to the weakness")
 
-question_strength = (
-    scores_with_meta[scores_with_meta["Index"] == top_index]
-    .groupby(["QuestionID", "QuestionText"])["Positive"]
+question_weakness = (
+    scores_with_meta[scores_with_meta["Index"] == weak_index]
+    .groupby(["QuestionID", "QuestionText"])["Negative"]
     .mean()
     .reset_index()
 )
 
-if not question_strength.empty:
-    question_strength = question_strength.sort_values("Positive", ascending=False)
+if not question_weakness.empty:
+    question_weakness = question_weakness.sort_values("Negative", ascending=False)
     top_highlights = [
-        f"<li><strong>{row.QuestionID}.</strong> {row.QuestionText} averaged {row.Positive:.1f}% positive responses across the selected years.</li>"
-        for row in question_strength.itertuples()
+        f"<li><strong>{row.QuestionID}.</strong> {row.QuestionText} averaged {row.Negative:.1f}% negative responses across the selected years.</li>"
+        for row in question_weakness.itertuples()
     ][:3]
     highlight_list = "".join(top_highlights)
     explanation_intro = (
-        f"The index stays above the {top_min:.0f}% positive threshold because its questions maintain consistently strong perception scores."
+        f"These questions keep the index from dropping below the {weak_min:.0f}% negative threshold because they consistently score high levels of negative perception."
     )
     st.markdown(
         f"<div style='font-size:16px; font-weight:600; color:#1f1f1f;'>{explanation_intro}</div>",
@@ -249,11 +249,11 @@ if not question_strength.empty:
             unsafe_allow_html=True,
         )
 
-top_questions = metadata[metadata["Index"] == top_index]
-top_questions = top_questions.sort_values(["SubIndex", "QuestionOrder"])
+weak_questions = metadata[metadata["Index"] == weak_index]
+weak_questions = weak_questions.sort_values(["SubIndex", "QuestionOrder"])
 
-for sub_index, sub_meta in top_questions.groupby("SubIndex"):
-    with st.expander(f"{top_index}: {sub_index}", expanded=False):
+for sub_index, sub_meta in weak_questions.groupby("SubIndex"):
+    with st.expander(f"{weak_index}: {sub_index}", expanded=False):
         snapshot = subindex_snapshot.get(sub_index, {})
         if snapshot:
             metric_cols = st.columns(len(selected_years))
@@ -303,6 +303,6 @@ for sub_index, sub_meta in top_questions.groupby("SubIndex"):
 
 st.caption(
     "Perception values in the tables respect the selected perception filter, while the "
-    "strongest index determination is based on positive responses across all selected years."
+    "weakest index determination is based on negative responses across all selected years."
 )
 
