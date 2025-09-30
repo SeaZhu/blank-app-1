@@ -151,7 +151,7 @@ chart = (
 st.altair_chart(chart, use_container_width=True)
 
 year_descriptions = ", ".join(
-    f"{int(row.FY)}: {row['Positive']:.0f}%" for row in top_index_scores.itertuples()
+    f"{int(row.FY)}: {row.Positive:.0f}%" for row in top_index_scores.itertuples()
 )
 st.caption(
     f"The {top_index} remained the strongest index because its positive perception never fell "
