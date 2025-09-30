@@ -96,7 +96,7 @@ scores_with_meta = scores.merge(
 )
 scores_with_meta = scores_with_meta.dropna(subset=["Index"])
 
-if scores_with_meta.empty():
+if scores_with_meta.empty:
     st.info("No index data available after applying filters.")
     st.stop()
 
