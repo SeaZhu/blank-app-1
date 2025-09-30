@@ -150,15 +150,6 @@ chart = (
 )
 st.altair_chart(chart, use_container_width=True)
 
-year_descriptions = ", ".join(
-    f"{int(row.FY)}: {row.Positive:.0f}%" for row in top_index_scores.itertuples()
-)
-st.caption(
-    f"The {top_index} remained the strongest index because its positive perception never fell "
-    f"below {top_min:.0f}% and peaked at {top_max:.0f}% across the selected years "
-    f"({year_descriptions})."
-)
-
 st.markdown("#### Sub-Index trends")
 
 metric_columns = ["Positive"]
@@ -236,13 +227,6 @@ if not question_strength.empty:
         for row in question_strength.itertuples()
     ][:3]
     highlight_list = "".join(top_highlights)
-    explanation_intro = (
-        f"The index stays above the {top_min:.0f}% positive threshold because its questions maintain consistently strong perception scores."
-    )
-    st.markdown(
-        f"<div style='font-size:16px; font-weight:600; color:#1f1f1f;'>{explanation_intro}</div>",
-        unsafe_allow_html=True,
-    )
     if highlight_list:
         st.markdown(
             f"<ul style='font-size:15px; font-weight:500; color:#1f1f1f; margin-top:0.5rem;'>{highlight_list}</ul>",

@@ -150,15 +150,6 @@ chart = (
 )
 st.altair_chart(chart, use_container_width=True)
 
-year_descriptions = ", ".join(
-    f"{int(row.FY)}: {row.Negative:.0f}%" for row in weak_index_scores.itertuples()
-)
-st.caption(
-    f"The {weak_index} emerges as the weakest index because its negative perception never "
-    f"dropped below {weak_min:.0f}% and reached up to {weak_max:.0f}% across the selected "
-    f"years ({year_descriptions})."
-)
-
 st.markdown("#### Sub-Index trends")
 
 metric_columns = ["Negative"]
@@ -236,13 +227,6 @@ if not question_weakness.empty:
         for row in question_weakness.itertuples()
     ][:3]
     highlight_list = "".join(top_highlights)
-    explanation_intro = (
-        f"These questions keep the index from dropping below the {weak_min:.0f}% negative threshold because they consistently score high levels of negative perception."
-    )
-    st.markdown(
-        f"<div style='font-size:16px; font-weight:600; color:#1f1f1f;'>{explanation_intro}</div>",
-        unsafe_allow_html=True,
-    )
     if highlight_list:
         st.markdown(
             f"<ul style='font-size:15px; font-weight:500; color:#1f1f1f; margin-top:0.5rem;'>{highlight_list}</ul>",
