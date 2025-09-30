@@ -192,6 +192,7 @@ else:
     st.altair_chart(sub_chart, use_container_width=True)
 
     summary_rows: list[dict[str, object]] = []
+    subindex_snapshot: dict[str, dict[str, object]] = {}
     for sub_index, subset in scores_with_meta[scores_with_meta["Index"] == top_index].groupby(
         "SubIndex"
     ):
@@ -201,13 +202,14 @@ else:
             row[str(year)] = value
         row["Questions"] = subset["QuestionID"].nunique()
         summary_rows.append(row)
+        subindex_snapshot[sub_index] = row
 
     if summary_rows:
         summary_df = pd.DataFrame(summary_rows)
         display_columns = ["Sub-Index"] + [str(y) for y in selected_years] + ["Questions"]
         summary_df = summary_df[display_columns]
         column_config = {
-            str(y): st.column_config.NumberColumn(label=str(y), format="%.0f%")
+            str(y): st.column_config.NumberColumn(label=str(y), format="%.0f%%")
             for y in selected_years
         }
         column_config["Questions"] = st.column_config.NumberColumn(format="%d")
@@ -221,42 +223,56 @@ else:
 st.markdown("#### Questions contributing to the strength")
 
 top_questions = metadata[metadata["Index"] == top_index]
+top_questions = top_questions.sort_values(["SubIndex", "QuestionOrder"])
 
-question_rows: list[dict[str, object]] = []
-for _, q_row in top_questions.sort_values("QuestionOrder").iterrows():
-    qid = q_row["QuestionID"]
-    qtext = q_row["QuestionText"]
-    question_scores = scores_with_meta[scores_with_meta["QuestionID"] == qid]
-    entry: dict[str, object] = {"Question": f"{qid}. {qtext}"}
-    for year in selected_years:
-        value = _mean_metric(question_scores, year, perception_column)
-        entry[str(year)] = value
-    if "Responses" in question_scores:
-        response_sum = question_scores.loc[
-            question_scores["FY"].isin(selected_years), "Responses"
-        ].sum()
-        entry["Responses"] = int(response_sum) if pd.notna(response_sum) else None
-    else:
-        entry["Responses"] = None
-    question_rows.append(entry)
+for sub_index, sub_meta in top_questions.groupby("SubIndex"):
+    with st.expander(f"{top_index}: {sub_index}", expanded=False):
+        snapshot = subindex_snapshot.get(sub_index, {})
+        if snapshot:
+            metric_cols = st.columns(len(selected_years))
+            for col, year in zip(metric_cols, selected_years):
+                value = snapshot.get(str(year))
+                display = f"{value:.0f}%" if isinstance(value, (int, float)) else "—"
+                with col:
+                    st.metric(label=str(year), value=display)
 
-if question_rows:
-    question_df = pd.DataFrame(question_rows)
-    display_columns = ["Question"] + [str(y) for y in selected_years] + ["Responses"]
-    question_df = question_df[display_columns]
-    column_config = {
-        str(y): st.column_config.NumberColumn(label=str(y), format="%.0f%")
-        for y in selected_years
-    }
-    column_config["Responses"] = st.column_config.NumberColumn(format="%d")
-    st.dataframe(
-        question_df,
-        hide_index=True,
-        use_container_width=True,
-        column_config=column_config,
-    )
-else:
-    st.info("No questions found for the strongest index.")
+        question_rows: list[dict[str, object]] = []
+        for _, q_row in sub_meta.sort_values("QuestionOrder").iterrows():
+            qid = q_row["QuestionID"]
+            qtext = q_row["QuestionText"]
+            question_scores = scores_with_meta[
+                (scores_with_meta["QuestionID"] == qid)
+                & (scores_with_meta["SubIndex"] == sub_index)
+            ]
+            entry: dict[str, object] = {"Question": f"{qid}. {qtext}"}
+            for year in selected_years:
+                value = _mean_metric(question_scores, year, perception_column)
+                entry[str(year)] = value
+            responses = question_scores.get("Responses")
+            if responses is not None and not responses.isna().all():
+                response_sum = responses.sum()
+                entry["Responses"] = int(response_sum) if pd.notna(response_sum) else None
+            else:
+                entry["Responses"] = None
+            question_rows.append(entry)
+
+        if question_rows:
+            question_df = pd.DataFrame(question_rows)
+            display_columns = ["Question"] + [str(y) for y in selected_years] + ["Responses"]
+            question_df = question_df[display_columns]
+            column_config = {
+                str(y): st.column_config.NumberColumn(label=str(y), format="%.0f%%")
+                for y in selected_years
+            }
+            column_config["Responses"] = st.column_config.NumberColumn(format="%d")
+            st.dataframe(
+                question_df,
+                hide_index=True,
+                use_container_width=True,
+                column_config=column_config,
+            )
+        else:
+            st.info("No questions found for this sub-index.")
 
 st.caption(
     "Perception values in the tables respect the selected perception filter, while the "
