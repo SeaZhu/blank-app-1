@@ -222,6 +222,37 @@ else:
 
 st.markdown("#### Questions contributing to the strength")
 
+question_strength = (
+    scores_with_meta[scores_with_meta["Index"] == top_index]
+    .groupby(["QuestionID", "QuestionText"])["Positive"]
+    .mean()
+    .reset_index()
+)
+
+if not question_strength.empty:
+    question_strength = question_strength.sort_values("Positive", ascending=False)
+    top_highlights = [
+        f"<li><strong>{row.QuestionID}.</strong> {row.QuestionText} averaged {row.Positive:.1f}% positive responses across the selected years.</li>"
+        for row in question_strength.itertuples()
+    ][:3]
+    highlight_list = "".join(top_highlights)
+    explanation_intro = (
+        f"The index stays above the {top_min:.0f}% positive threshold because its questions maintain consistently strong perception scores."
+    )
+    st.markdown(
+        "<div style='font-size:18px; font-weight:700; margin-bottom:0.25rem;'>Explain how the questions contribute</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<div style='font-size:16px; font-weight:600; color:#1f1f1f;'>{explanation_intro}</div>",
+        unsafe_allow_html=True,
+    )
+    if highlight_list:
+        st.markdown(
+            f"<ul style='font-size:15px; font-weight:500; color:#1f1f1f; margin-top:0.5rem;'>{highlight_list}</ul>",
+            unsafe_allow_html=True,
+        )
+
 top_questions = metadata[metadata["Index"] == top_index]
 top_questions = top_questions.sort_values(["SubIndex", "QuestionOrder"])
 
