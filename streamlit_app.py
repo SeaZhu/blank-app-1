@@ -10,6 +10,16 @@ dimensions = st.Page(
     title="Performance Dimensions",
     icon="📈",
 )
+strength = st.Page(
+    "pages/strength_areas.py",
+    title="Strength Areas",
+    icon="💪",
+)
+weakness = st.Page(
+    "pages/weakness_areas.py",
+    title="Weakness Areas",
+    icon="🩹",
+)
 
-nav = st.navigation({"Main": [overview, dimensions]})
+nav = st.navigation({"Main": [overview, dimensions, strength, weakness]})
 nav.run()
