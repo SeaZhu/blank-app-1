@@ -48,6 +48,9 @@ if raw is None or raw.empty:
 
 metadata = prepare_question_metadata(map_sheet, def_map)
 metadata = metadata[metadata["QuestionID"].isin(raw.columns)]
+metadata = metadata[
+    metadata["Performance Dimension"].str.strip().str.lower() != "other"
+]
 
 if metadata.empty:
     st.error("Could not derive question metadata from the workbook.")
