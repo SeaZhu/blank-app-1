@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from typing import Iterable
 
+import re
+
 import pandas as pd
 
 from fevs_calculations import likert_split
@@ -51,11 +53,42 @@ def prepare_question_metadata(map_df: pd.DataFrame, def_df: pd.DataFrame) -> pd.
         def_clean["Performance Dimension"] = (
             def_clean["Performance Dimension"].astype(str).str.strip()
         )
+
+        # Build a lookup from each question to its explicit sub-index name so that
+        # derived indices such as "Job Satisfaction" or "Produced High Quality Work"
+        # surface correctly in downstream charts. The workbook uses formats like
+        # "Q.70" in the questions column, so we normalise them to match the
+        # question identifiers in the raw response sheet (e.g. "Q70").
+        question_to_subindex: dict[str, str] = {}
+        subindex_to_dimension: dict[str, str] = {}
+        for _, row in def_clean.iterrows():
+            sub_index = row.get("SubIndex")
+            if not sub_index or sub_index.lower() == "nan":
+                continue
+            subindex_to_dimension[sub_index] = row.get("Performance Dimension") or ""
+            questions = str(row.get("Questions", ""))
+            if not questions:
+                continue
+            matches = re.findall(r"Q\.?\s*(\d+)", questions)
+            for match in matches:
+                qid = f"Q{int(match)}"
+                question_to_subindex[qid] = sub_index
+
+        if question_to_subindex:
+            tidy["SubIndex"] = tidy["QuestionID"].map(question_to_subindex).fillna(
+                tidy["SubIndex"]
+            )
+
         tidy = tidy.merge(
             def_clean[["SubIndex", "Performance Dimension"]],
             on="SubIndex",
             how="left",
         )
+
+        if subindex_to_dimension:
+            tidy["Performance Dimension"] = tidy["SubIndex"].map(
+                subindex_to_dimension
+            ).fillna(tidy["Performance Dimension"])
     else:
         tidy["Performance Dimension"] = tidy["Index"]
 
