@@ -26,9 +26,13 @@ def stacked_bar(df: pd.DataFrame, label: str, pos: str, neu: str, neg: str, titl
 
 def response_rate_line(rr_df: pd.DataFrame):
     # expects columns: FY, rate
-    fig = px.line(rr_df.sort_values("FY"), x="FY", y="rate", markers=True)
+    rr_df = rr_df.sort_values("FY")
+    fig = px.line(rr_df, x="FY", y="rate", markers=True)
+    tick_vals = rr_df["FY"].dropna().unique().tolist()
     fig.update_layout(
         yaxis_title="Response Rate (%)", xaxis_title=None,
         height=260, margin=dict(l=10, r=10, t=10, b=10)
     )
+    if tick_vals:
+        fig.update_xaxes(tickmode="array", tickvals=tick_vals, ticktext=[str(int(val)) for val in tick_vals])
     return fig
