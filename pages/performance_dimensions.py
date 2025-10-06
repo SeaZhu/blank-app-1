@@ -42,9 +42,7 @@ def _weighted_percent(df: pd.DataFrame, column: str) -> float | None:
 
 DEFAULT_PATH = Path("data/fevs_sample_data_3FYs_DataSet_5.xlsx")
 
-# --------- Data loading (sidebar) ---------
-st.sidebar.header("Data")
-
+# --------- Data loading ---------
 if DEFAULT_PATH.exists():
     sheets = _load_excel_cached(str(DEFAULT_PATH))
 else:
@@ -52,11 +50,8 @@ else:
     if example.exists():
         sheets = _load_excel_cached(str(example))
     else:
-        uploaded = st.sidebar.file_uploader("Upload the Excel file", type=["xlsx"])
-        if uploaded is None:
-            st.error("Upload the Excel file or place it under ./data/")
-            st.stop()
-        sheets = load_excel(uploaded)
+        st.error("Upload the Excel file or place it under ./data/ before launching.")
+        st.stop()
 
 raw = sheets.get("fevs_sample_data_3FYs_Set5")
 map_sheet = sheets.get("Index-Qns-Map")
@@ -228,29 +223,60 @@ else:
 
 chart_df = trend_df[trend_df["Perception"].isin(chart_perceptions)].copy()
 
-if chart_df.empty:
-    st.info("No perception data available for this index.")
-else:
-    chart_df = chart_df.sort_values(["SeriesLabel", "FY"])
-    chart_df["FY"] = chart_df["FY"].astype(str)
-    fig = px.line(
-        chart_df,
-        x="FY",
-        y="Percent",
-        color="SeriesLabel",
-        markers=True,
-        title=chart_title,
-    )
-    fig.update_layout(
-        height=360,
-        margin=dict(l=10, r=10, t=50, b=10),
-        yaxis_title="Percent",
-        xaxis_title=None,
-        legend_title="Series",
-    )
-    fig.update_yaxes(range=[0, 100])
-    fig.update_xaxes(type="category")
-    st.plotly_chart(fig, use_container_width=True)
+index_chart_df = chart_df[chart_df["Label"] == index_label].copy()
+subindex_chart_df = chart_df[chart_df["Label"] != index_label].copy()
+
+index_col, subindex_col = st.columns(2)
+
+with index_col:
+    if index_chart_df.empty:
+        st.info("No perception data available for the selected index.")
+    else:
+        index_chart_df = index_chart_df.sort_values(["SeriesLabel", "FY"])
+        index_chart_df["FY"] = index_chart_df["FY"].astype(str)
+        index_fig = px.line(
+            index_chart_df,
+            x="FY",
+            y="Percent",
+            color="SeriesLabel",
+            markers=True,
+            title=f"{chart_title} · Index",
+        )
+        index_fig.update_layout(
+            height=360,
+            margin=dict(l=10, r=10, t=50, b=10),
+            yaxis_title="Percent",
+            xaxis_title=None,
+            legend_title="Series",
+        )
+        index_fig.update_yaxes(range=[0, 100])
+        index_fig.update_xaxes(type="category")
+        st.plotly_chart(index_fig, use_container_width=True)
+
+with subindex_col:
+    if subindex_chart_df.empty:
+        st.info("No perception data available for the sub-indices.")
+    else:
+        subindex_chart_df = subindex_chart_df.sort_values(["SeriesLabel", "FY"])
+        subindex_chart_df["FY"] = subindex_chart_df["FY"].astype(str)
+        subindex_fig = px.line(
+            subindex_chart_df,
+            x="FY",
+            y="Percent",
+            color="SeriesLabel",
+            markers=True,
+            title=f"{chart_title} · Sub-Indices",
+        )
+        subindex_fig.update_layout(
+            height=360,
+            margin=dict(l=10, r=10, t=50, b=10),
+            yaxis_title="Percent",
+            xaxis_title=None,
+            legend_title="Series",
+        )
+        subindex_fig.update_yaxes(range=[0, 100])
+        subindex_fig.update_xaxes(type="category")
+        st.plotly_chart(subindex_fig, use_container_width=True)
 
 st.markdown("---")
 
