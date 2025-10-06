@@ -1,19 +1,23 @@
-"""Performance Dimensions page."""
+"""Index Results page."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Iterable
+
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 from fevs_io import load_excel
 from fevs_processing import compute_question_scores, prepare_question_metadata
 
+
 st.set_page_config(
-    page_title="Performance Dimensions · FEVS-style Dashboard",
+    page_title="Index Results · FEVS-style Dashboard",
     layout="wide",
 )
 
-st.title("Performance Dimensions")
+st.title("Index Results")
 
 
 @st.cache_data(show_spinner=False)
@@ -21,9 +25,25 @@ def _load_excel_cached(fp: str) -> dict[str, pd.DataFrame]:
     return load_excel(fp)
 
 
+def _weighted_percent(df: pd.DataFrame, column: str) -> float | None:
+    """Return the response-share weighted value for the given perception column."""
+
+    if column not in df.columns:
+        return None
+    valid = df.dropna(subset=[column, "Responses"])
+    if valid.empty:
+        return None
+    total = valid["Responses"].sum()
+    if total == 0:
+        return None
+    value = (valid[column] * valid["Responses"]).sum() / total
+    return float(value)
+
+
+DEFAULT_PATH = Path("data/fevs_sample_data_3FYs_DataSet_5.xlsx")
+
 # --------- Data loading (sidebar) ---------
 st.sidebar.header("Data")
-DEFAULT_PATH = Path("data/fevs_sample_data_3FYs_DataSet_5.xlsx")
 
 if DEFAULT_PATH.exists():
     sheets = _load_excel_cached(str(DEFAULT_PATH))
@@ -48,153 +68,245 @@ if raw is None or raw.empty:
 
 metadata = prepare_question_metadata(map_sheet, def_map)
 metadata = metadata[metadata["QuestionID"].isin(raw.columns)]
-metadata = metadata[
-    metadata["Performance Dimension"].str.strip().str.lower() != "other"
-]
+metadata = metadata.dropna(subset=["Performance Dimension"])
+metadata["Performance Dimension"] = (
+    metadata["Performance Dimension"].astype(str).str.strip()
+)
+metadata["SubIndex"] = metadata["SubIndex"].fillna("").astype(str).str.strip()
+metadata = metadata[metadata["Performance Dimension"].str.lower() != "other"]
 
 if metadata.empty:
     st.error("Could not derive question metadata from the workbook.")
     st.stop()
 
-scores = compute_question_scores(raw, metadata["QuestionID"].unique())
+question_ids = metadata["QuestionID"].unique()
+scores = compute_question_scores(raw, question_ids)
 if scores.empty:
     st.warning("No response data available for the selected workbook.")
     st.stop()
 
-available_years = sorted(scores["FY"].unique())
-perception_choices = {
-    "Positive": "Positive",
-    "Neutral": "Neutral",
-    "Negative": "Negative",
-}
-
-default_years = available_years[-2:] if len(available_years) >= 2 else available_years
-selected_years = st.sidebar.multiselect(
-    "Survey Years",
-    options=available_years,
-    default=default_years,
-)
-if not selected_years:
-    selected_years = available_years
-selected_years = sorted(selected_years)
-
-perception_label = st.sidebar.selectbox("Perception", options=list(perception_choices.keys()))
-perception_column = perception_choices[perception_label]
-
-st.caption(
-    "Results show the {0} share of responses for each performance dimension, "
-    "sub-index, and survey item.".format(perception_label.lower())
+scores = scores.merge(
+    metadata[
+        [
+            "QuestionID",
+            "QuestionText",
+            "SubIndex",
+            "Performance Dimension",
+            "QuestionOrder",
+        ]
+    ],
+    on="QuestionID",
+    how="left",
 )
 
-scores = scores[scores["FY"].isin(selected_years)]
-if scores.empty:
-    st.info("No responses for the selected filters.")
+scores = scores.dropna(subset=["Performance Dimension"])
+scores["FY"] = scores["FY"].astype(int)
+scores["Performance Dimension"] = scores["Performance Dimension"].astype(str).str.strip()
+scores["SubIndex"] = scores["SubIndex"].fillna("").astype(str).str.strip()
+scores["SubIndexDisplay"] = scores["SubIndex"].apply(lambda x: x if x else "Ungrouped Items")
+scores["QuestionOrder"] = scores["QuestionOrder"].fillna(0).astype(int)
+
+available_indices = (
+    metadata["Performance Dimension"]
+    .dropna()
+    .astype(str)
+    .str.strip()
+    .loc[lambda s: s.str.lower() != "other"]
+    .drop_duplicates()
+    .sort_values(key=lambda s: s.str.lower())
+    .tolist()
+)
+if not available_indices:
+    st.error("No index definitions available.")
     st.stop()
 
+available_years = sorted(scores["FY"].unique())
+years_to_show = available_years[-3:] if len(available_years) >= 3 else available_years
 
-def _mean_metric(subset: pd.DataFrame, year: int) -> float | None:
-    series = subset.loc[subset["FY"] == year, perception_column]
-    if series.empty:
-        return None
-    value = series.mean()
-    return float(value) if pd.notna(value) else None
+filters = st.columns([1, 1])
+with filters[0]:
+    selected_index = st.selectbox("Index", options=available_indices)
+with filters[1]:
+    perception_choice = st.selectbox(
+        "Perception",
+        options=["All", "Positive", "Negative"],
+        help="Show question detail for the selected response perception.",
+    )
 
+selected_scores = scores[
+    (scores["Performance Dimension"] == selected_index)
+    & (scores["FY"].isin(years_to_show))
+].copy()
 
-for dimension, dim_meta in metadata.groupby("Performance Dimension"):
-    st.markdown(f"## {dimension}")
-    dim_questions = dim_meta["QuestionID"].unique()
-    dim_scores = scores[scores["QuestionID"].isin(dim_questions)]
+if selected_scores.empty:
+    st.info("No responses available for the selected filters.")
+    st.stop()
 
-    # Dimension-level metrics
-    metric_cols = st.columns(len(selected_years))
-    for col, year in zip(metric_cols, selected_years):
-        value = _mean_metric(dim_scores, year)
-        display = f"{value:.0f}%" if value is not None else "—"
-        with col:
-            st.metric(label=str(year), value=display)
+selected_metadata = metadata[metadata["Performance Dimension"] == selected_index].copy()
+selected_metadata["SubIndex"] = selected_metadata["SubIndex"].fillna("").astype(str).str.strip()
 
-    # Sub-index summary table
-    summary_rows: list[dict[str, object]] = []
-    subindex_snapshot: dict[str, dict[str, object]] = {}
-    for sub_index, sub_meta in dim_meta.groupby("SubIndex"):
-        sub_questions = sub_meta["QuestionID"].unique()
-        sub_scores = dim_scores[dim_scores["QuestionID"].isin(sub_questions)]
-        row: dict[str, object] = {
-            "Sub-Index": sub_index,
-            "Questions": len(sub_questions),
-        }
-        for year in selected_years:
-            value = _mean_metric(sub_scores, year)
-            row[str(year)] = value
-        summary_rows.append(row)
-        subindex_snapshot[sub_index] = row
+ordered_subindices: list[str] = []
+for value in selected_metadata["SubIndex"]:
+    label = value if value else "Ungrouped Items"
+    if label not in ordered_subindices:
+        ordered_subindices.append(label)
 
-    if summary_rows:
-        summary_df = pd.DataFrame(summary_rows)
-        display_columns = ["Sub-Index"] + [str(y) for y in selected_years] + ["Questions"]
-        summary_df = summary_df[display_columns]
-        summary_df = summary_df.sort_values("Sub-Index")
-        column_config = {
-            str(y): st.column_config.NumberColumn(label=str(y), format="%.0f%%")
-            for y in selected_years
-        }
-        column_config["Questions"] = st.column_config.NumberColumn(format="%d")
+if not ordered_subindices and not selected_scores.empty:
+    ordered_subindices = ["Ungrouped Items"]
+
+trend_rows: list[dict[str, object]] = []
+index_label = f"{selected_index} (Index)"
+for year in years_to_show:
+    year_df = selected_scores[selected_scores["FY"] == year]
+    pos_val = _weighted_percent(year_df, "Positive")
+    if pos_val is not None:
+        trend_rows.append(
+            {
+                "FY": year,
+                "Label": index_label,
+                "Perception": "Positive",
+                "Percent": pos_val,
+            }
+        )
+    neg_val = _weighted_percent(year_df, "Negative")
+    if neg_val is not None:
+        trend_rows.append(
+            {
+                "FY": year,
+                "Label": index_label,
+                "Perception": "Negative",
+                "Percent": neg_val,
+            }
+        )
+
+for subindex in ordered_subindices:
+    subset = selected_scores[selected_scores["SubIndexDisplay"] == subindex]
+    if subset.empty:
+        continue
+    for year in years_to_show:
+        year_df = subset[subset["FY"] == year]
+        pos_val = _weighted_percent(year_df, "Positive")
+        if pos_val is not None:
+            trend_rows.append(
+                {
+                    "FY": year,
+                    "Label": subindex,
+                    "Perception": "Positive",
+                    "Percent": pos_val,
+                }
+            )
+        neg_val = _weighted_percent(year_df, "Negative")
+        if neg_val is not None:
+            trend_rows.append(
+                {
+                    "FY": year,
+                    "Label": subindex,
+                    "Perception": "Negative",
+                    "Percent": neg_val,
+                }
+            )
+
+trend_df = pd.DataFrame(trend_rows)
+
+chart_columns = st.columns(2)
+positive_df = trend_df[trend_df["Perception"] == "Positive"]
+negative_df = trend_df[trend_df["Perception"] == "Negative"]
+
+with chart_columns[0]:
+    if positive_df.empty:
+        st.info("No positive perception data available for this index.")
+    else:
+        pos_fig = px.line(
+            positive_df,
+            x="FY",
+            y="Percent",
+            color="Label",
+            markers=True,
+            title="Positive Responses",
+        )
+        pos_fig.update_layout(
+            height=360,
+            margin=dict(l=10, r=10, t=50, b=10),
+            yaxis_title="Percent",
+            xaxis_title=None,
+            legend_title="Sub-Index",
+        )
+        pos_fig.update_yaxes(range=[0, 100])
+        st.plotly_chart(pos_fig, use_container_width=True)
+
+with chart_columns[1]:
+    if negative_df.empty:
+        st.info("No negative perception data available for this index.")
+    else:
+        neg_fig = px.line(
+            negative_df,
+            x="FY",
+            y="Percent",
+            color="Label",
+            markers=True,
+            title="Negative Responses",
+        )
+        neg_fig.update_layout(
+            height=360,
+            margin=dict(l=10, r=10, t=50, b=10),
+            yaxis_title="Percent",
+            xaxis_title=None,
+            legend_title="Sub-Index",
+        )
+        neg_fig.update_yaxes(range=[0, 100])
+        st.plotly_chart(neg_fig, use_container_width=True)
+
+st.markdown("---")
+
+perception_columns: dict[str, Iterable[str]] = {
+    "All": ("Positive", "Neutral", "Negative"),
+    "Positive": ("Positive",),
+    "Negative": ("Negative",),
+}
+selected_perceptions = perception_columns[perception_choice]
+
+for subindex in ordered_subindices:
+    subset = selected_scores[selected_scores["SubIndexDisplay"] == subindex]
+    if subset.empty:
+        continue
+
+    expander_title = f"{selected_index}: {subindex}"
+    with st.expander(expander_title, expanded=False):
+        question_rows: list[dict[str, object]] = []
+        grouped = subset.sort_values("QuestionOrder").groupby("QuestionID", sort=False)
+        for qid, q_group in grouped:
+            question_text = q_group["QuestionText"].iloc[0]
+            row: dict[str, object] = {"Question": f"{qid}. {question_text}"}
+            for perception in selected_perceptions:
+                for year in years_to_show:
+                    value_series = q_group.loc[q_group["FY"] == year, perception]
+                    value = float(value_series.iloc[0]) if not value_series.empty else None
+                    column_label = f"{year} {perception}"
+                    row[column_label] = value
+            question_rows.append(row)
+
+        if not question_rows:
+            st.info("No questions available for this sub-index.")
+            continue
+
+        question_df = pd.DataFrame(question_rows)
+        ordered_columns = ["Question"]
+        for perception in selected_perceptions:
+            for year in years_to_show:
+                ordered_columns.append(f"{year} {perception}")
+        question_df = question_df[ordered_columns]
+
+        column_config: dict[str, st.column_config.Column] = {"Question": st.column_config.TextColumn()}
+        for perception in selected_perceptions:
+            for year in years_to_show:
+                column_config[f"{year} {perception}"] = st.column_config.NumberColumn(
+                    label=f"{year} {perception}",
+                    format="%.0f%%",
+                )
+
         st.dataframe(
-            summary_df,
+            question_df,
             hide_index=True,
             use_container_width=True,
             column_config=column_config,
         )
-    else:
-        st.info("No sub-index data found for this dimension.")
-
-    # Detailed expanders per sub-index
-    for sub_index, sub_meta in dim_meta.groupby("SubIndex"):
-        expander_title = f"{dimension}: {sub_index}"
-        with st.expander(expander_title, expanded=False):
-            snapshot = subindex_snapshot.get(sub_index, {})
-            if snapshot:
-                metric_cols = st.columns(len(selected_years))
-                for col, year in zip(metric_cols, selected_years):
-                    value = snapshot.get(str(year))
-                    display = f"{value:.0f}%" if isinstance(value, (int, float)) else "—"
-                    with col:
-                        st.metric(label=str(year), value=display)
-
-            question_rows: list[dict[str, object]] = []
-            for _, q_row in sub_meta.sort_values("QuestionOrder").iterrows():
-                qid = q_row["QuestionID"]
-                qtext = q_row["QuestionText"]
-                question_scores = scores[scores["QuestionID"] == qid]
-                entry: dict[str, object] = {
-                    "Question": f"{qid}. {qtext}",
-                }
-                for year in selected_years:
-                    value = _mean_metric(question_scores, year)
-                    entry[str(year)] = value
-                entry["Responses"] = (
-                    question_scores["Responses"].sum()
-                    if not question_scores.empty
-                    else None
-                )
-                question_rows.append(entry)
-
-            if question_rows:
-                question_df = pd.DataFrame(question_rows)
-                display_columns = ["Question"] + [str(y) for y in selected_years] + ["Responses"]
-                question_df = question_df[display_columns]
-                column_config = {
-                    str(y): st.column_config.NumberColumn(label=str(y), format="%.0f%%")
-                    for y in selected_years
-                }
-                column_config["Responses"] = st.column_config.NumberColumn(format="%d")
-                st.dataframe(
-                    question_df,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config=column_config,
-                )
-            else:
-                st.info("No questions available for this sub-index.")
-
-    st.markdown("---")

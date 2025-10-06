@@ -7,7 +7,7 @@ st.set_page_config(page_title="FEVS-style Dashboard", layout="wide")
 overview = st.Page("pages/overview.py", title="Overview", icon="📊")
 dimensions = st.Page(
     "pages/performance_dimensions.py",
-    title="Performance Dimensions",
+    title="Index Results",
     icon="📈",
 )
 strength = st.Page(
