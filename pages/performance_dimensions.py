@@ -17,7 +17,7 @@ st.set_page_config(
     layout="wide",
 )
 
-st.title("Index Results")
+title_placeholder = st.empty()
 
 
 @st.cache_data(show_spinner=False)
@@ -123,15 +123,22 @@ if not available_indices:
 available_years = sorted(scores["FY"].unique())
 years_to_show = available_years[-3:] if len(available_years) >= 3 else available_years
 
-filters = st.columns([1, 1])
-with filters[0]:
-    selected_index = st.selectbox("Index", options=available_indices)
-with filters[1]:
-    perception_choice = st.selectbox(
-        "Perception",
-        options=["All", "Positive", "Negative"],
-        help="Show question detail for the selected response perception.",
-    )
+st.sidebar.divider()
+st.sidebar.subheader("Filters")
+selected_index = st.sidebar.selectbox(
+    "Index",
+    options=available_indices,
+    index=0,
+)
+perception_options = ["Positive", "Negative", "All"]
+perception_choice = st.sidebar.selectbox(
+    "Perception",
+    options=perception_options,
+    index=0,
+    help="Show question detail for the selected response perception.",
+)
+
+title_placeholder.title(f"Index Results: {selected_index}")
 
 selected_scores = scores[
     (scores["Performance Dimension"] == selected_index)
@@ -164,6 +171,7 @@ for year in years_to_show:
             {
                 "FY": year,
                 "Label": index_label,
+                "SeriesLabel": f"{index_label} (Positive)",
                 "Perception": "Positive",
                 "Percent": pos_val,
             }
@@ -174,6 +182,7 @@ for year in years_to_show:
             {
                 "FY": year,
                 "Label": index_label,
+                "SeriesLabel": f"{index_label} (Negative)",
                 "Perception": "Negative",
                 "Percent": neg_val,
             }
@@ -191,6 +200,7 @@ for subindex in ordered_subindices:
                 {
                     "FY": year,
                     "Label": subindex,
+                    "SeriesLabel": f"{subindex} (Positive)",
                     "Perception": "Positive",
                     "Percent": pos_val,
                 }
@@ -201,6 +211,7 @@ for subindex in ordered_subindices:
                 {
                     "FY": year,
                     "Label": subindex,
+                    "SeriesLabel": f"{subindex} (Negative)",
                     "Perception": "Negative",
                     "Percent": neg_val,
                 }
@@ -208,53 +219,38 @@ for subindex in ordered_subindices:
 
 trend_df = pd.DataFrame(trend_rows)
 
-chart_columns = st.columns(2)
-positive_df = trend_df[trend_df["Perception"] == "Positive"]
-negative_df = trend_df[trend_df["Perception"] == "Negative"]
+if perception_choice == "All":
+    chart_perceptions = ("Positive", "Negative")
+    chart_title = "Positive & Negative Responses"
+else:
+    chart_perceptions = (perception_choice,)
+    chart_title = f"{perception_choice} Responses"
 
-with chart_columns[0]:
-    if positive_df.empty:
-        st.info("No positive perception data available for this index.")
-    else:
-        pos_fig = px.line(
-            positive_df,
-            x="FY",
-            y="Percent",
-            color="Label",
-            markers=True,
-            title="Positive Responses",
-        )
-        pos_fig.update_layout(
-            height=360,
-            margin=dict(l=10, r=10, t=50, b=10),
-            yaxis_title="Percent",
-            xaxis_title=None,
-            legend_title="Sub-Index",
-        )
-        pos_fig.update_yaxes(range=[0, 100])
-        st.plotly_chart(pos_fig, use_container_width=True)
+chart_df = trend_df[trend_df["Perception"].isin(chart_perceptions)].copy()
 
-with chart_columns[1]:
-    if negative_df.empty:
-        st.info("No negative perception data available for this index.")
-    else:
-        neg_fig = px.line(
-            negative_df,
-            x="FY",
-            y="Percent",
-            color="Label",
-            markers=True,
-            title="Negative Responses",
-        )
-        neg_fig.update_layout(
-            height=360,
-            margin=dict(l=10, r=10, t=50, b=10),
-            yaxis_title="Percent",
-            xaxis_title=None,
-            legend_title="Sub-Index",
-        )
-        neg_fig.update_yaxes(range=[0, 100])
-        st.plotly_chart(neg_fig, use_container_width=True)
+if chart_df.empty:
+    st.info("No perception data available for this index.")
+else:
+    chart_df = chart_df.sort_values(["SeriesLabel", "FY"])
+    chart_df["FY"] = chart_df["FY"].astype(str)
+    fig = px.line(
+        chart_df,
+        x="FY",
+        y="Percent",
+        color="SeriesLabel",
+        markers=True,
+        title=chart_title,
+    )
+    fig.update_layout(
+        height=360,
+        margin=dict(l=10, r=10, t=50, b=10),
+        yaxis_title="Percent",
+        xaxis_title=None,
+        legend_title="Series",
+    )
+    fig.update_yaxes(range=[0, 100])
+    fig.update_xaxes(type="category")
+    st.plotly_chart(fig, use_container_width=True)
 
 st.markdown("---")
 

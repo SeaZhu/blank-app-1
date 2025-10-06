@@ -58,16 +58,6 @@ if raw is None or raw.empty:
 qcols = [c for c in raw.columns if str(c).startswith("Q")]
 years = sorted(raw["FY"].dropna().unique())
 
-# --------- Filters ---------
-c1, c2 = st.columns([1, 3])
-with c1:
-    fy = st.selectbox("Survey Year", ["All"] + [int(y) for y in years])
-with c2:
-    st.markdown("### Selected Survey Year")
-    st.markdown(f"# {fy if fy != 'All' else 'All Years'}")
-
-data = raw[raw["FY"] == int(fy)].copy() if fy != "All" else raw.copy()
-
 # --------- Left panel ---------
 left, right = st.columns([1.2, 2.3])
 
@@ -89,7 +79,7 @@ with left:
     avg_completed = (
         completed_counts.loc[completed_counts["FY"].isin(trend_years), "completed"].mean()
         if not completed_counts.empty
-        else data["Response.ID"].nunique()
+        else raw["Response.ID"].nunique()
     )
 
     if pop is not None and not pop.empty:
@@ -179,6 +169,9 @@ with right:
                 subset = trend_df[trend_df["Index"] == index_name]
                 if subset.empty:
                     continue
+                subset = subset.sort_values("FY").assign(
+                    FY=lambda df: df["FY"].astype(str)
+                )
                 fig = px.line(
                     subset,
                     x="FY",
@@ -192,6 +185,7 @@ with right:
                     yaxis_title="Positive (%)",
                     xaxis_title=None,
                 )
+                fig.update_xaxes(type="category")
                 fig.update_yaxes(range=[0, 100])
                 fig.update_traces(mode="lines+markers")
                 col = cols[i % 3]
