@@ -118,7 +118,6 @@ if not available_indices:
 available_years = sorted(scores["FY"].unique())
 years_to_show = available_years[-3:] if len(available_years) >= 3 else available_years
 
-st.sidebar.divider()
 st.sidebar.subheader("Filters")
 selected_index = st.sidebar.selectbox(
     "Index",

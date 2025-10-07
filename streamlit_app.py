@@ -10,16 +10,11 @@ dimensions = st.Page(
     title="Index Results",
     icon="📈",
 )
-strength = st.Page(
-    "pages/strength_areas.py",
-    title="Strength Areas",
-    icon="💪",
-)
-weakness = st.Page(
-    "pages/weakness_areas.py",
-    title="Weakness Areas",
-    icon="🩹",
+survey_items = st.Page(
+    "pages/survey_item_results.py",
+    title="Survey Item Results",
+    icon="📝",
 )
 
-nav = st.navigation({"Main": [overview, dimensions, strength, weakness]})
+nav = st.navigation({"Main": [overview, dimensions, survey_items]})
 nav.run()
