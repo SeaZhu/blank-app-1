@@ -15,6 +15,13 @@ survey_items = st.Page(
     title="Survey Item Results",
     icon="📝",
 )
+areas_of_concern = st.Page(
+    "pages/areas_of_concern.py",
+    title="Areas of Concern",
+    icon="🚨",
+)
 
-nav = st.navigation({"Main": [overview, dimensions, survey_items]})
+nav = st.navigation({
+    "Main": [overview, dimensions, survey_items, areas_of_concern]
+})
 nav.run()
