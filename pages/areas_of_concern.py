@@ -149,7 +149,7 @@ def _area_of_concern_for_index(index_name: str) -> dict[str, object] | None:
                 entry = {"FY": str(year)}
                 for perception in ("Positive", "Neutral", "Negative"):
                     if perception in row_values.index:
-                        entry[perception] = float(row_values[perception])
+                        entry[perception] = round(float(row_values[perception]), 2)
                 yearly_rows.append(entry)
 
             if not yearly_rows:
@@ -195,7 +195,7 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
     if pd.isna(avg_positive):
         container.caption("Three-year average positive: N/A")
     else:
-        container.caption(f"Three-year average positive: {avg_positive:.0f}%")
+        container.caption(f"Three-year average positive: {avg_positive:.2f}%")
 
     chart_rows: list[dict[str, object]] = []
     for row in yearly_rows:
@@ -216,6 +216,7 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
         return
 
     chart_df = pd.DataFrame(chart_rows)
+    chart_df["Percent"] = chart_df["Percent"].round(2)
     chart_df["FY"] = pd.Categorical(chart_df["FY"], categories=year_labels, ordered=True)
     perception_order = ["Positive", "Neutral", "Negative"]
     chart_df["Perception"] = pd.Categorical(chart_df["Perception"], categories=perception_order, ordered=True)
@@ -232,7 +233,7 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
         y="Percent",
         color="Perception",
         color_discrete_map=color_map,
-        text_auto=".0f%%",
+        text_auto=None,
         barmode="stack",
         category_orders={"FY": year_labels, "Perception": perception_order},
         labels={"FY": "Fiscal Year", "Percent": "Percent of Responses"},
@@ -243,7 +244,7 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
         legend_title="Perception",
         yaxis=dict(range=[0, 100]),
     )
-    fig.update_traces(textfont_size=14, textposition="inside")
+    fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=14, textposition="inside")
 
     container.plotly_chart(fig, use_container_width=True)
 

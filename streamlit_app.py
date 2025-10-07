@@ -20,8 +20,13 @@ areas_of_concern = st.Page(
     title="Areas of Concern",
     icon="🚨",
 )
+our_strength = st.Page(
+    "pages/our_strength.py",
+    title="Our Strength",
+    icon="💪",
+)
 
 nav = st.navigation({
-    "Main": [overview, dimensions, survey_items, areas_of_concern]
+    "Main": [overview, dimensions, survey_items, areas_of_concern, our_strength]
 })
 nav.run()
