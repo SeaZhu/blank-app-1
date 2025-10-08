@@ -99,11 +99,11 @@ with left:
     avg_admin_display = int(round(avg_administered)) if pd.notna(avg_administered) else 0
     avg_response_rate = to_pct(avg_completed_display, avg_admin_display)
 
-    st.write("#### Avg Surveys Completed (3 FY)")
+    st.write("#### Avg Surveys Completed")
     st.subheader(f"{avg_completed_display:,}")
-    st.write("#### Avg Surveys Administered (3 FY)")
+    st.write("#### Avg Surveys Administered")
     st.subheader(f"{avg_admin_display:,}")
-    st.write("#### Avg Response Rate (3 FY)")
+    st.write("#### Avg Response Rate")
     st.subheader(f"{avg_response_rate:.0f}%")
 
     st.write("#### Response Rate Over Time")
@@ -125,7 +125,7 @@ with left:
 
 # --------- Right panel ---------
 with right:
-    st.subheader("Index Positive Rates (3 FY)")
+    st.subheader("Index Positive Rates (2023 - 2025)")
 
     if idxmap is None or idxmap.empty:
         st.info("Index definition sheet not found; cannot compute index trends.")
