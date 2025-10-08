@@ -1,12 +1,13 @@
 """Areas of Concern page."""
 from __future__ import annotations
 
-from itertools import zip_longest
 from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+PLOTLY_CONFIG = {"displaylogo": False}
 
 from fevs_io import load_excel
 from fevs_processing import compute_question_scores, prepare_question_metadata
@@ -119,11 +120,32 @@ if not years_to_show:
     st.info("No fiscal year information available in the workbook.")
     st.stop()
 
-st.title("Areas of Concern in Index")
+st.sidebar.subheader("Filters")
+selected_index = st.sidebar.selectbox("Index", options=available_indices, index=0)
+
+st.title("Areas of Concern")
 st.caption(
     "Each index highlights the survey item with the lowest three-year average positive "
-    "response rate. The stacked bars show how perceptions have shifted over time."
+    "response rate. Use the filter to explore the lowest-performing question for any "
+    "index and inspect how perceptions have shifted over time."
 )
+
+
+def _format_question_text(question_id: object, question_text: object) -> str:
+    """Return a readable survey item label with graceful fallbacks."""
+
+    question_id_str = "" if pd.isna(question_id) else str(question_id).strip()
+    if isinstance(question_text, str):
+        question_text_str = question_text.strip()
+    else:
+        question_text_str = ""
+
+    if not question_text_str:
+        question_text_str = "Question text unavailable"
+
+    if question_id_str:
+        return f"{question_id_str}. {question_text_str}"
+    return question_text_str
 
 
 def _area_of_concern_for_index(index_name: str) -> dict[str, object] | None:
@@ -138,7 +160,7 @@ def _area_of_concern_for_index(index_name: str) -> dict[str, object] | None:
             continue
 
         if best_candidate is None or avg_positive < best_candidate["avg_positive"]:
-            question_text = q_group["QuestionText"].iloc[0]
+            question_text_raw = q_group["QuestionText"].iloc[0]
             subindex = q_group["SubIndexDisplay"].iloc[0]
             yearly_rows: list[dict[str, object]] = []
             for year in years_to_show:
@@ -157,38 +179,25 @@ def _area_of_concern_for_index(index_name: str) -> dict[str, object] | None:
 
             best_candidate = {
                 "question_id": qid,
-                "question_text": question_text,
+                "question_text": _format_question_text(qid, question_text_raw),
                 "subindex": subindex,
                 "avg_positive": avg_positive,
                 "yearly_rows": yearly_rows,
+                "index": index_name,
             }
 
     return best_candidate
 
 
-cards: list[dict[str, object]] = []
-for index_name in available_indices:
-    card = _area_of_concern_for_index(index_name)
-    if card is None:
-        continue
-    card["index"] = index_name
-    cards.append(card)
-
-if not cards:
-    st.info("Could not determine areas of concern for the available indices.")
-    st.stop()
-
-
 def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, object]) -> None:
     index_name = card["index"]
-    question_id = card["question_id"]
     question_text = card["question_text"]
     subindex = card["subindex"]
     avg_positive = card["avg_positive"]
     yearly_rows = card["yearly_rows"]
 
     container.markdown(f"### {index_name}")
-    detail_lines = [f"**Area of Concern:** {question_id}. {question_text}"]
+    detail_lines = [f"**Area of Concern:** {question_text}"]
     if subindex:
         detail_lines.append(f"<span style='color: #6c757d;'>Sub-Index: {subindex}</span>")
     container.markdown("<br/>".join(detail_lines), unsafe_allow_html=True)
@@ -197,26 +206,19 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
     else:
         container.caption(f"Three-year average positive: {avg_positive:.2f}%")
 
-    chart_rows: list[dict[str, object]] = []
-    for row in yearly_rows:
-        for perception in ("Positive", "Neutral", "Negative"):
-            value = row.get(perception)
-            if value is None:
-                continue
-            chart_rows.append(
-                {
-                    "FY": row["FY"],
-                    "Perception": perception,
-                    "Percent": value,
-                }
-            )
-
-    if not chart_rows:
+    chart_df = pd.DataFrame(yearly_rows)
+    if chart_df.empty:
         container.info("No perception detail available for this item.")
         return
 
-    chart_df = pd.DataFrame(chart_rows)
-    chart_df["Percent"] = chart_df["Percent"].round(2)
+    perception_order = ["Positive", "Neutral", "Negative"]
+    chart_df = chart_df.melt(id_vars="FY", value_vars=perception_order, var_name="Perception", value_name="Percent")
+    chart_df = chart_df.dropna(subset=["Percent"])
+    if chart_df.empty:
+        container.info("No perception detail available for this item.")
+        return
+
+    chart_df["Percent"] = chart_df["Percent"].astype(float).round(2)
     chart_df["FY"] = pd.Categorical(chart_df["FY"], categories=year_labels, ordered=True)
     perception_order = ["Positive", "Neutral", "Negative"]
     chart_df["Perception"] = pd.Categorical(chart_df["Perception"], categories=perception_order, ordered=True)
@@ -233,7 +235,6 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
         y="Percent",
         color="Perception",
         color_discrete_map=color_map,
-        text_auto=None,
         barmode="stack",
         category_orders={"FY": year_labels, "Perception": perception_order},
         labels={"FY": "Fiscal Year", "Percent": "Percent of Responses"},
@@ -246,13 +247,12 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
     )
     fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=14, textposition="inside")
 
-    container.plotly_chart(fig, use_container_width=True)
+    container.plotly_chart(fig, config=PLOTLY_CONFIG)
 
 
-for first, second in zip_longest(cards[0::2], cards[1::2]):
-    col1, col2 = st.columns(2)
-    if first is not None:
-        _render_card(col1, first)
-    if second is not None:
-        _render_card(col2, second)
-
+selected_card = _area_of_concern_for_index(selected_index)
+if selected_card is None:
+    st.info("Could not determine the area of concern for the selected index.")
+else:
+    card_container = st.container()
+    _render_card(card_container, selected_card)

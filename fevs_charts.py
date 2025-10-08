@@ -25,14 +25,26 @@ def stacked_bar(df: pd.DataFrame, label: str, pos: str, neu: str, neg: str, titl
     return fig
 
 def response_rate_line(rr_df: pd.DataFrame):
-    # expects columns: FY, rate
-    rr_df = rr_df.sort_values("FY")
-    fig = px.line(rr_df, x="FY", y="rate", markers=True)
-    tick_vals = rr_df["FY"].dropna().unique().tolist()
+    """Render a bar chart of response rate by fiscal year."""
+
+    rr_df = rr_df.sort_values("FY").dropna(subset=["FY", "rate"])
+    if rr_df.empty:
+        return px.bar()
+
+    tick_vals = rr_df["FY"].astype(int).tolist()
+    fig = px.bar(rr_df, x="FY", y="rate")
+    fig.update_traces(texttemplate="%{y:.1f}%", textposition="outside")
     fig.update_layout(
-        yaxis_title="Response Rate (%)", xaxis_title=None,
-        height=260, margin=dict(l=10, r=10, t=10, b=10)
+        yaxis_title="Response Rate (%)",
+        xaxis_title=None,
+        height=260,
+        margin=dict(l=10, r=10, t=10, b=10),
     )
+    fig.update_yaxes(range=[0, 100])
     if tick_vals:
-        fig.update_xaxes(tickmode="array", tickvals=tick_vals, ticktext=[str(int(val)) for val in tick_vals])
+        fig.update_xaxes(
+            tickmode="array",
+            tickvals=tick_vals,
+            ticktext=[str(val) for val in tick_vals],
+        )
     return fig

@@ -13,6 +13,8 @@ from fevs_calculations import (
     compute_index_value,
 )
 
+PLOTLY_CONFIG = {"displaylogo": False}
+
 st.set_page_config(page_title="Overview · FEVS-style Dashboard", layout="wide")
 st.title("Overview")
 
@@ -97,11 +99,11 @@ with left:
     avg_admin_display = int(round(avg_administered)) if pd.notna(avg_administered) else 0
     avg_response_rate = to_pct(avg_completed_display, avg_admin_display)
 
-    st.write("#### Avg Surveys Completed (3 FY)")
+    st.write("#### Avg Surveys Completed")
     st.subheader(f"{avg_completed_display:,}")
-    st.write("#### Avg Surveys Administered (3 FY)")
+    st.write("#### Avg Surveys Administered")
     st.subheader(f"{avg_admin_display:,}")
-    st.write("#### Avg Response Rate (3 FY)")
+    st.write("#### Avg Response Rate")
     st.subheader(f"{avg_response_rate:.0f}%")
 
     st.write("#### Response Rate Over Time")
@@ -112,7 +114,10 @@ with left:
         merged = merged.dropna(subset=["admin"])
         if not merged.empty:
             merged["rate"] = 100 * merged["completed"] / merged["admin"]
-            st.plotly_chart(response_rate_line(merged), use_container_width=True)
+            st.plotly_chart(
+                response_rate_line(merged),
+                config=PLOTLY_CONFIG,
+            )
         else:
             st.info("Population sheet not found for the available fiscal years.")
     else:
@@ -120,7 +125,7 @@ with left:
 
 # --------- Right panel ---------
 with right:
-    st.subheader("Index Positive Rates (3 FY)")
+    st.subheader("Index Positive Rates (2023 - 2025)")
 
     if idxmap is None or idxmap.empty:
         st.info("Index definition sheet not found; cannot compute index trends.")
@@ -190,6 +195,6 @@ with right:
                 fig.update_traces(mode="lines+markers")
                 col = cols[i % 3]
                 with col:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, config=PLOTLY_CONFIG)
         else:
             st.info("No index results available for the selected dataset.")
