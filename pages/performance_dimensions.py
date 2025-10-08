@@ -8,6 +8,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+PLOTLY_CONFIG = {"displaylogo": False}
+
 from fevs_io import load_excel
 from fevs_processing import compute_question_scores, prepare_question_metadata
 
@@ -252,7 +254,7 @@ with index_col:
         )
         index_fig.update_yaxes(range=[0, 100])
         index_fig.update_xaxes(type="category")
-        st.plotly_chart(index_fig, width="stretch", config={"displaylogo": False})
+        st.plotly_chart(index_fig, config=PLOTLY_CONFIG)
 
 with subindex_col:
     if subindex_chart_df.empty:
@@ -277,7 +279,7 @@ with subindex_col:
         )
         subindex_fig.update_yaxes(range=[0, 100])
         subindex_fig.update_xaxes(type="category")
-        st.plotly_chart(subindex_fig, width="stretch", config={"displaylogo": False})
+        st.plotly_chart(subindex_fig, config=PLOTLY_CONFIG)
 
 st.markdown("---")
 

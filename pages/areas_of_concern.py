@@ -7,6 +7,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+PLOTLY_CONFIG = {"displaylogo": False}
+
 from fevs_io import load_excel
 from fevs_processing import compute_question_scores, prepare_question_metadata
 
@@ -245,7 +247,7 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
     )
     fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=14, textposition="inside")
 
-    container.plotly_chart(fig, width="stretch", config={"displaylogo": False})
+    container.plotly_chart(fig, config=PLOTLY_CONFIG)
 
 
 selected_card = _area_of_concern_for_index(selected_index)
@@ -254,4 +256,3 @@ if selected_card is None:
 else:
     card_container = st.container()
     _render_card(card_container, selected_card)
-

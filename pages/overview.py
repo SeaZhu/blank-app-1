@@ -13,6 +13,8 @@ from fevs_calculations import (
     compute_index_value,
 )
 
+PLOTLY_CONFIG = {"displaylogo": False}
+
 st.set_page_config(page_title="Overview · FEVS-style Dashboard", layout="wide")
 st.title("Overview")
 
@@ -114,8 +116,7 @@ with left:
             merged["rate"] = 100 * merged["completed"] / merged["admin"]
             st.plotly_chart(
                 response_rate_line(merged),
-                width="stretch",
-                config={"displaylogo": False},
+                config=PLOTLY_CONFIG,
             )
         else:
             st.info("Population sheet not found for the available fiscal years.")
@@ -194,6 +195,6 @@ with right:
                 fig.update_traces(mode="lines+markers")
                 col = cols[i % 3]
                 with col:
-                    st.plotly_chart(fig, width="stretch", config={"displaylogo": False})
+                    st.plotly_chart(fig, config=PLOTLY_CONFIG)
         else:
             st.info("No index results available for the selected dataset.")
