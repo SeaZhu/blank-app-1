@@ -126,6 +126,23 @@ st.caption(
 )
 
 
+def _format_question_text(question_id: object, question_text: object) -> str:
+    """Return a readable survey item label with graceful fallbacks."""
+
+    question_id_str = "" if pd.isna(question_id) else str(question_id).strip()
+    if isinstance(question_text, str):
+        question_text_str = question_text.strip()
+    else:
+        question_text_str = ""
+
+    if not question_text_str:
+        question_text_str = "Question text unavailable"
+
+    if question_id_str:
+        return f"{question_id_str}. {question_text_str}"
+    return question_text_str
+
+
 def _area_of_concern_for_index(index_name: str) -> dict[str, object] | None:
     subset = scores[(scores["Performance Dimension"] == index_name) & (scores["FY"].isin(years_to_show))]
     if subset.empty:
@@ -138,7 +155,7 @@ def _area_of_concern_for_index(index_name: str) -> dict[str, object] | None:
             continue
 
         if best_candidate is None or avg_positive < best_candidate["avg_positive"]:
-            question_text = q_group["QuestionText"].iloc[0]
+            question_text_raw = q_group["QuestionText"].iloc[0]
             subindex = q_group["SubIndexDisplay"].iloc[0]
             yearly_rows: list[dict[str, object]] = []
             for year in years_to_show:
@@ -157,7 +174,7 @@ def _area_of_concern_for_index(index_name: str) -> dict[str, object] | None:
 
             best_candidate = {
                 "question_id": qid,
-                "question_text": question_text,
+                "question_text": _format_question_text(qid, question_text_raw),
                 "subindex": subindex,
                 "avg_positive": avg_positive,
                 "yearly_rows": yearly_rows,
@@ -181,14 +198,13 @@ if not cards:
 
 def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, object]) -> None:
     index_name = card["index"]
-    question_id = card["question_id"]
     question_text = card["question_text"]
     subindex = card["subindex"]
     avg_positive = card["avg_positive"]
     yearly_rows = card["yearly_rows"]
 
     container.markdown(f"### {index_name}")
-    detail_lines = [f"**Area of Concern:** {question_id}. {question_text}"]
+    detail_lines = [f"**Area of Concern:** {question_text}"]
     if subindex:
         detail_lines.append(f"<span style='color: #6c757d;'>Sub-Index: {subindex}</span>")
     container.markdown("<br/>".join(detail_lines), unsafe_allow_html=True)
