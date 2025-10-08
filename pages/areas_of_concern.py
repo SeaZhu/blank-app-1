@@ -249,7 +249,6 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
         y="Percent",
         color="Perception",
         color_discrete_map=color_map,
-        text_auto=None,
         barmode="stack",
         category_orders={"FY": year_labels, "Perception": perception_order},
         labels={"FY": "Fiscal Year", "Percent": "Percent of Responses"},
@@ -262,7 +261,7 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
     )
     fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=14, textposition="inside")
 
-    container.plotly_chart(fig, use_container_width=True)
+    container.plotly_chart(fig, width="stretch")
 
 
 for first, second in zip_longest(cards[0::2], cards[1::2]):

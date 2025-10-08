@@ -38,8 +38,8 @@ nav = st.navigation(
             dimensions,
             survey_items,
             areas_of_concern,
-            opportunities_to_improve,
             our_strength,
+            opportunities_to_improve,
         ]
     }
 )
