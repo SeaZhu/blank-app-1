@@ -37,6 +37,21 @@ def _weighted_percent(df: pd.DataFrame, column: str) -> float | None:
     return float(value)
 
 
+def _format_question_text(question_id: object, question_text: object) -> str:
+    question_id_str = "" if pd.isna(question_id) else str(question_id).strip()
+    if isinstance(question_text, str):
+        question_text_str = question_text.strip()
+    else:
+        question_text_str = ""
+
+    if not question_text_str:
+        question_text_str = "Question text unavailable"
+
+    if question_id_str:
+        return f"{question_id_str}. {question_text_str}"
+    return question_text_str
+
+
 def _trend_label(start: float | None, end: float | None) -> str:
     if start is None or end is None:
         return "Insufficient data"
@@ -165,47 +180,86 @@ if not top_strengths:
     st.info("No survey items qualified for the strength ranking.")
     st.stop()
 
-chart_records: list[dict[str, object]] = []
-for item in top_strengths:
-    question_label = f"{item['QuestionID']}. {item['QuestionText']}"
-    per_year = item["PerYear"]
-    for year in years_to_show:
-        year_str = str(year)
-        value = per_year.get(year_str)
-        if value is None:
-            continue
-        chart_records.append(
-            {
-                "Survey Item": question_label,
-                "FY": year_str,
-                "Positive": round(float(value), 2),
-            }
-        )
+strength_options = {
+    _format_question_text(item["QuestionID"], item["QuestionText"]): item for item in top_strengths
+}
 
-if chart_records:
-    chart_df = pd.DataFrame(chart_records)
-    chart_df["FY"] = pd.Categorical(chart_df["FY"], categories=year_labels, ordered=True)
-
-    fig = px.line(
-        chart_df,
-        x="FY",
-        y="Positive",
-        color="Survey Item",
-        markers=True,
-        category_orders={"FY": year_labels},
-        labels={"FY": "Fiscal Year", "Positive": "% Positive"},
-    )
-    fig.update_layout(
-        height=480,
-        margin=dict(l=10, r=20, t=60, b=10),
-        legend_title="Survey Item",
-        yaxis=dict(range=[0, 100], ticksuffix="%"),
-    )
-    fig.update_xaxes(type="category")
-    fig.update_traces(hovertemplate="%{x}: %{y:.2f}%", line_width=3)
-    st.plotly_chart(fig, use_container_width=True)
-else:
+if not strength_options:
     st.info("No chartable data found for the top strengths.")
+else:
+    selected_label = st.selectbox(
+        "Select a survey item to view perception trends",
+        options=list(strength_options.keys()),
+    )
+    selected_item = strength_options[selected_label]
+
+    question_scores = scores[
+        (scores["QuestionID"] == selected_item["QuestionID"])
+        & (scores["FY"].isin(years_to_show))
+    ].copy()
+
+    if question_scores.empty:
+        st.info("No perception data available for the selected survey item.")
+    else:
+        question_scores["FY"] = question_scores["FY"].astype(int).astype(str)
+        perception_columns = ["Positive", "Neutral", "Negative"]
+        perception_df = question_scores[["FY"] + [col for col in perception_columns if col in question_scores.columns]]
+        perception_df = perception_df.drop_duplicates(subset=["FY"])
+
+        melted = perception_df.melt(
+            id_vars="FY",
+            value_vars=perception_columns,
+            var_name="Perception",
+            value_name="Percent",
+        ).dropna(subset=["Percent"])
+
+        if melted.empty:
+            st.info("Perception breakdown unavailable for the selected survey item.")
+        else:
+            melted["FY"] = pd.Categorical(melted["FY"], categories=year_labels, ordered=True)
+            melted["Percent"] = melted["Percent"].astype(float).round(2)
+            melted["Perception"] = pd.Categorical(
+                melted["Perception"],
+                categories=["Positive", "Neutral", "Negative"],
+                ordered=True,
+            )
+
+            color_map = {
+                "Positive": "#0B5ED7",
+                "Neutral": "#6C757D",
+                "Negative": "#E5533D",
+            }
+
+            fig = px.bar(
+                melted,
+                x="FY",
+                y="Percent",
+                color="Perception",
+                barmode="stack",
+                color_discrete_map=color_map,
+                category_orders={"FY": year_labels, "Perception": ["Positive", "Neutral", "Negative"]},
+                labels={"FY": "Fiscal Year", "Percent": "Percent of Responses"},
+            )
+            fig.update_layout(
+                height=420,
+                margin=dict(l=10, r=20, t=60, b=10),
+                legend_title="Perception",
+                yaxis=dict(range=[0, 100]),
+                title=selected_label,
+            )
+            fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=14, textposition="inside")
+
+            avg_positive = selected_item.get("AveragePositive")
+            detail_lines = [f"**3-Year Avg Positive:** {avg_positive:.2f}%" if avg_positive is not None else "**3-Year Avg Positive:** N/A"]
+            subindex_label = selected_item.get("SubIndex", "")
+            if subindex_label:
+                detail_lines.append(f"<span style='color: #6c757d;'>Sub-Index: {subindex_label}</span>")
+            index_label = selected_item.get("Index")
+            if index_label:
+                detail_lines.append(f"<span style='color: #6c757d;'>Index: {index_label}</span>")
+
+            st.markdown("<br/>".join(detail_lines), unsafe_allow_html=True)
+            st.plotly_chart(fig, width="stretch", config={"displaylogo": False})
 
 
 table_rows: list[dict[str, object]] = []

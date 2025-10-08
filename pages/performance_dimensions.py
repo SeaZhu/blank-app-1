@@ -252,7 +252,7 @@ with index_col:
         )
         index_fig.update_yaxes(range=[0, 100])
         index_fig.update_xaxes(type="category")
-        st.plotly_chart(index_fig, use_container_width=True)
+        st.plotly_chart(index_fig, width="stretch", config={"displaylogo": False})
 
 with subindex_col:
     if subindex_chart_df.empty:
@@ -277,7 +277,7 @@ with subindex_col:
         )
         subindex_fig.update_yaxes(range=[0, 100])
         subindex_fig.update_xaxes(type="category")
-        st.plotly_chart(subindex_fig, use_container_width=True)
+        st.plotly_chart(subindex_fig, width="stretch", config={"displaylogo": False})
 
 st.markdown("---")
 

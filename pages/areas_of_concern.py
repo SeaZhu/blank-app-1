@@ -1,7 +1,6 @@
 """Areas of Concern page."""
 from __future__ import annotations
 
-from itertools import zip_longest
 from pathlib import Path
 
 import pandas as pd
@@ -119,10 +118,14 @@ if not years_to_show:
     st.info("No fiscal year information available in the workbook.")
     st.stop()
 
-st.title("Areas of Concern in Index")
+st.sidebar.subheader("Filters")
+selected_index = st.sidebar.selectbox("Index", options=available_indices, index=0)
+
+st.title("Areas of Concern")
 st.caption(
     "Each index highlights the survey item with the lowest three-year average positive "
-    "response rate. The stacked bars show how perceptions have shifted over time."
+    "response rate. Use the filter to explore the lowest-performing question for any "
+    "index and inspect how perceptions have shifted over time."
 )
 
 
@@ -178,22 +181,10 @@ def _area_of_concern_for_index(index_name: str) -> dict[str, object] | None:
                 "subindex": subindex,
                 "avg_positive": avg_positive,
                 "yearly_rows": yearly_rows,
+                "index": index_name,
             }
 
     return best_candidate
-
-
-cards: list[dict[str, object]] = []
-for index_name in available_indices:
-    card = _area_of_concern_for_index(index_name)
-    if card is None:
-        continue
-    card["index"] = index_name
-    cards.append(card)
-
-if not cards:
-    st.info("Could not determine areas of concern for the available indices.")
-    st.stop()
 
 
 def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, object]) -> None:
@@ -213,26 +204,19 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
     else:
         container.caption(f"Three-year average positive: {avg_positive:.2f}%")
 
-    chart_rows: list[dict[str, object]] = []
-    for row in yearly_rows:
-        for perception in ("Positive", "Neutral", "Negative"):
-            value = row.get(perception)
-            if value is None:
-                continue
-            chart_rows.append(
-                {
-                    "FY": row["FY"],
-                    "Perception": perception,
-                    "Percent": value,
-                }
-            )
-
-    if not chart_rows:
+    chart_df = pd.DataFrame(yearly_rows)
+    if chart_df.empty:
         container.info("No perception detail available for this item.")
         return
 
-    chart_df = pd.DataFrame(chart_rows)
-    chart_df["Percent"] = chart_df["Percent"].round(2)
+    perception_order = ["Positive", "Neutral", "Negative"]
+    chart_df = chart_df.melt(id_vars="FY", value_vars=perception_order, var_name="Perception", value_name="Percent")
+    chart_df = chart_df.dropna(subset=["Percent"])
+    if chart_df.empty:
+        container.info("No perception detail available for this item.")
+        return
+
+    chart_df["Percent"] = chart_df["Percent"].astype(float).round(2)
     chart_df["FY"] = pd.Categorical(chart_df["FY"], categories=year_labels, ordered=True)
     perception_order = ["Positive", "Neutral", "Negative"]
     chart_df["Perception"] = pd.Categorical(chart_df["Perception"], categories=perception_order, ordered=True)
@@ -261,13 +245,13 @@ def _render_card(container: st.delta_generator.DeltaGenerator, card: dict[str, o
     )
     fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=14, textposition="inside")
 
-    container.plotly_chart(fig, width="stretch")
+    container.plotly_chart(fig, width="stretch", config={"displaylogo": False})
 
 
-for first, second in zip_longest(cards[0::2], cards[1::2]):
-    col1, col2 = st.columns(2)
-    if first is not None:
-        _render_card(col1, first)
-    if second is not None:
-        _render_card(col2, second)
+selected_card = _area_of_concern_for_index(selected_index)
+if selected_card is None:
+    st.info("Could not determine the area of concern for the selected index.")
+else:
+    card_container = st.container()
+    _render_card(card_container, selected_card)
 

@@ -112,7 +112,11 @@ with left:
         merged = merged.dropna(subset=["admin"])
         if not merged.empty:
             merged["rate"] = 100 * merged["completed"] / merged["admin"]
-            st.plotly_chart(response_rate_line(merged), use_container_width=True)
+            st.plotly_chart(
+                response_rate_line(merged),
+                width="stretch",
+                config={"displaylogo": False},
+            )
         else:
             st.info("Population sheet not found for the available fiscal years.")
     else:
@@ -190,6 +194,6 @@ with right:
                 fig.update_traces(mode="lines+markers")
                 col = cols[i % 3]
                 with col:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch", config={"displaylogo": False})
         else:
             st.info("No index results available for the selected dataset.")

@@ -25,6 +25,16 @@ def _load_excel_cached(fp: str) -> dict[str, pd.DataFrame]:
     return load_excel(fp)
 
 
+def _format_question_text(question_id: str, question_text: str) -> str:
+    question_text = (question_text or "").strip()
+    if not question_text:
+        question_text = "Question text unavailable"
+    question_id = str(question_id).strip() if question_id is not None else ""
+    if question_id:
+        return f"{question_id}. {question_text}"
+    return question_text
+
+
 DEFAULT_PATH = Path("data/fevs_sample_data_3FYs_DataSet_5.xlsx")
 
 # --------- Data loading ---------
@@ -126,38 +136,93 @@ if lowest_five.empty:
     st.stop()
 
 lowest_ids = lowest_five["QuestionID"].tolist()
-order_map = {qid: pos for pos, qid in enumerate(lowest_ids)}
 
-chart_df = recent_scores[recent_scores["QuestionID"].isin(lowest_ids)].copy()
-chart_df["FY"] = chart_df["FY"].astype(str)
-chart_df["QuestionLabel"] = chart_df.apply(
-    lambda row: f"{row['QuestionID']}. "
-    + (
-        row["QuestionText"].strip()
-        if row["QuestionText"].strip()
-        else "Question text unavailable"
-    ),
-    axis=1,
-)
-chart_df["QuestionOrder"] = chart_df["QuestionID"].map(order_map)
-chart_df["Positive"] = chart_df["Positive"].round(2)
+question_options = {
+    _format_question_text(row["QuestionID"], row["QuestionText"]): row
+    for row in lowest_five.to_dict("records")
+}
 
-chart_df = chart_df.sort_values(["QuestionOrder", "FY"])
+if not question_options:
+    st.info("No chartable data available for the lowest survey items.")
+else:
+    selected_label = st.selectbox(
+        "Select a survey item to view perception trends",
+        options=list(question_options.keys()),
+    )
+    selected_row = question_options[selected_label]
+    selected_scores = recent_scores[
+        (recent_scores["QuestionID"] == selected_row["QuestionID"])
+        & (recent_scores["FY"].isin(years_to_show))
+    ].copy()
 
-fig = px.line(
-    chart_df,
-    x="FY",
-    y="Positive",
-    color="QuestionLabel",
-    markers=True,
-    category_orders={"FY": [str(year) for year in years_to_show]},
-    labels={"Positive": "Positive Responses (%)", "FY": "Fiscal Year", "QuestionLabel": "Survey Item"},
-    title="Lowest Five Survey Items by Positive Response",
-)
-fig.update_layout(height=420, margin=dict(l=10, r=10, t=60, b=10), legend_title="Survey Item")
-fig.update_yaxes(range=[0, 100])
+    if selected_scores.empty:
+        st.info("No perception data available for the selected survey item.")
+    else:
+        selected_scores["FY"] = selected_scores["FY"].astype(int).astype(str)
+        perception_columns = ["Positive", "Neutral", "Negative"]
+        perception_df = selected_scores[["FY"] + [col for col in perception_columns if col in selected_scores.columns]]
+        perception_df = perception_df.drop_duplicates(subset=["FY"])
 
-st.plotly_chart(fig, use_container_width=True)
+        melted = perception_df.melt(
+            id_vars="FY",
+            value_vars=perception_columns,
+            var_name="Perception",
+            value_name="Percent",
+        ).dropna(subset=["Percent"])
+
+        if melted.empty:
+            st.info("Perception breakdown unavailable for the selected survey item.")
+        else:
+            melted["FY"] = pd.Categorical(
+                melted["FY"],
+                categories=[str(year) for year in years_to_show],
+                ordered=True,
+            )
+            melted["Percent"] = melted["Percent"].astype(float).round(2)
+            melted["Perception"] = pd.Categorical(
+                melted["Perception"],
+                categories=["Positive", "Neutral", "Negative"],
+                ordered=True,
+            )
+
+            color_map = {
+                "Positive": "#0B5ED7",
+                "Neutral": "#6C757D",
+                "Negative": "#E5533D",
+            }
+
+            fig = px.bar(
+                melted,
+                x="FY",
+                y="Percent",
+                color="Perception",
+                barmode="stack",
+                color_discrete_map=color_map,
+                category_orders={"FY": [str(year) for year in years_to_show], "Perception": ["Positive", "Neutral", "Negative"]},
+                labels={"FY": "Fiscal Year", "Percent": "Percent of Responses"},
+                title=selected_label,
+            )
+            fig.update_layout(
+                height=420,
+                margin=dict(l=10, r=10, t=60, b=10),
+                legend_title="Perception",
+                yaxis=dict(range=[0, 100]),
+            )
+            fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=14, textposition="inside")
+
+            avg_positive = selected_row.get("ThreeYearAverage")
+            detail_lines = [
+                f"**3-Year Avg Positive:** {avg_positive:.2f}%" if pd.notna(avg_positive) else "**3-Year Avg Positive:** N/A"
+            ]
+            index_label = selected_row.get("Performance Dimension", "")
+            if index_label:
+                detail_lines.append(f"<span style='color: #6c757d;'>Index: {index_label}</span>")
+            subindex_label = selected_row.get("SubIndex", "")
+            if subindex_label:
+                detail_lines.append(f"<span style='color: #6c757d;'>Sub-Index: {subindex_label if subindex_label else 'Ungrouped Items'}</span>")
+
+            st.markdown("<br/>".join(detail_lines), unsafe_allow_html=True)
+            st.plotly_chart(fig, width="stretch", config={"displaylogo": False})
 
 # Build summary table
 yearly = (
@@ -167,12 +232,6 @@ yearly = (
 )
 
 summary = lowest_five.merge(yearly, on="QuestionID", how="left")
-
-def _format_question_text(question_id: str, question_text: str) -> str:
-    question_text = question_text.strip()
-    if not question_text:
-        question_text = "Question text unavailable"
-    return f"{question_id}. {question_text}"
 
 
 def _describe_trend(row: pd.Series, years: list[int]) -> str:
