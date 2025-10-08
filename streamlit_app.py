@@ -30,6 +30,11 @@ our_strength = st.Page(
     title="Our Strength",
     icon="💪",
 )
+distribution = st.Page(
+    "pages/distribution_of_survey_items.py",
+    title="Distribution of Survey Items",
+    icon="📈",
+)
 
 nav = st.navigation(
     {
@@ -40,6 +45,7 @@ nav = st.navigation(
             areas_of_concern,
             our_strength,
             opportunities_to_improve,
+            distribution,
         ]
     }
 )
