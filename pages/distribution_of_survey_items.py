@@ -161,6 +161,12 @@ if metadata.empty:
 
 metadata = metadata[metadata["QuestionID"].isin(raw.columns)]
 metadata["Performance Dimension"] = metadata["Performance Dimension"].fillna("").astype(str).str.strip()
+metadata = metadata[metadata["Performance Dimension"].astype(str).str.strip() != ""]
+metadata = metadata[metadata["Performance Dimension"].str.lower() != "other"]
+
+if metadata.empty:
+    st.info("No indexed survey items available after excluding 'Other'.")
+    st.stop()
 
 question_ids = metadata["QuestionID"].tolist()
 scores = compute_question_scores(raw, question_ids)
@@ -177,7 +183,9 @@ scores = scores.merge(
 scores = scores.dropna(subset=["FY", "QuestionID"])
 scores["FY"] = scores["FY"].astype(int)
 scores["Positive"] = scores["Positive"].astype(float)
-scores["Performance Dimension"] = scores["Performance Dimension"].fillna("").astype(str)
+scores["Performance Dimension"] = scores["Performance Dimension"].fillna("").astype(str).str.strip()
+scores = scores[scores["Performance Dimension"].astype(str).str.strip() != ""]
+scores = scores[scores["Performance Dimension"].str.lower() != "other"]
 
 available_years = sorted(scores["FY"].unique())
 year_colors = _assign_year_colors(available_years)

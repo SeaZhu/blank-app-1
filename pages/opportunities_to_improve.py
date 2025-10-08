@@ -157,14 +157,22 @@ if raw is None or raw.empty:
     st.stop()
 
 metadata = prepare_question_metadata(map_sheet, def_map)
+
+if metadata.empty:
+    st.error("Could not derive question metadata from the workbook.")
+    st.stop()
+
 metadata = metadata[metadata["QuestionID"].isin(raw.columns)]
 metadata["SubIndex"] = metadata["SubIndex"].fillna("").astype(str).str.strip()
 metadata["Performance Dimension"] = (
     metadata["Performance Dimension"].fillna("").astype(str).str.strip()
 )
 
+metadata = metadata[metadata["Performance Dimension"].astype(str).str.strip() != ""]
+metadata = metadata[metadata["Performance Dimension"].str.lower() != "other"]
+
 if metadata.empty:
-    st.error("Could not derive question metadata from the workbook.")
+    st.info("No indexed survey items available after excluding 'Other'.")
     st.stop()
 
 question_ids = metadata["QuestionID"].unique()
@@ -183,7 +191,9 @@ scores = scores.merge(
 scores = scores.dropna(subset=["QuestionID", "FY"])
 scores["FY"] = scores["FY"].astype(int)
 scores["QuestionText"] = scores["QuestionText"].fillna("").astype(str)
-scores["Performance Dimension"] = scores["Performance Dimension"].fillna("").astype(str)
+scores["Performance Dimension"] = scores["Performance Dimension"].fillna("").astype(str).str.strip()
+scores = scores[scores["Performance Dimension"].astype(str).str.strip() != ""]
+scores = scores[scores["Performance Dimension"].str.lower() != "other"]
 scores["SubIndex"] = scores["SubIndex"].fillna("").astype(str)
 
 available_years = sorted(scores["FY"].unique())
