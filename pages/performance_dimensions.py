@@ -212,6 +212,8 @@ for subindex in ordered_subindices:
             )
 
 trend_df = pd.DataFrame(trend_rows)
+if not trend_df.empty:
+    trend_df["Percent"] = trend_df["Percent"].round(2)
 
 if perception_choice == "All":
     chart_perceptions = ("Positive", "Negative")
@@ -296,7 +298,12 @@ for subindex in ordered_subindices:
         question_rows: list[dict[str, object]] = []
         grouped = subset.sort_values("QuestionOrder").groupby("QuestionID", sort=False)
         for qid, q_group in grouped:
-            question_text = q_group["QuestionText"].iloc[0]
+            question_text_raw = q_group["QuestionText"].iloc[0]
+            question_text = (
+                str(question_text_raw).strip()
+                if pd.notna(question_text_raw) and str(question_text_raw).strip()
+                else "Question text unavailable"
+            )
             row: dict[str, object] = {"Question": f"{qid}. {question_text}"}
             for perception in selected_perceptions:
                 for year in years_to_show:

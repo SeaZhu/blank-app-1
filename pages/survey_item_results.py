@@ -169,7 +169,12 @@ for position, subindex in enumerate(ordered_subindices, start=1):
     question_rows: list[dict[str, object]] = []
     grouped = subset.sort_values("QuestionOrder").groupby("QuestionID", sort=False)
     for qid, q_group in grouped:
-        question_text = q_group["QuestionText"].iloc[0]
+        question_text_raw = q_group["QuestionText"].iloc[0]
+        question_text = (
+            str(question_text_raw).strip()
+            if pd.notna(question_text_raw) and str(question_text_raw).strip()
+            else "Question text unavailable"
+        )
         row: dict[str, object] = {"Question": f"{qid}. {question_text}"}
         for year in years_to_show:
             value_series = q_group.loc[q_group["FY"] == year, perception_column]
