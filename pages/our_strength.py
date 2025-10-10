@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import textwrap
 from typing import Iterable
 
 import pandas as pd
@@ -49,21 +48,6 @@ def _render_sidebar_legend() -> None:
             unsafe_allow_html=True,
         )
 
-
-def _compact_title(question_id: object, question_text: object, *, width: int = 58) -> str:
-    base_text = ""
-    if isinstance(question_text, str):
-        base_text = question_text.strip()
-    if not base_text:
-        base_text = "Question text unavailable"
-
-    prefix = ""
-    if pd.notna(question_id) and str(question_id).strip():
-        prefix = f"{str(question_id).strip()}. "
-
-    available_width = max(width - len(prefix), 12)
-    shortened = textwrap.shorten(base_text, width=available_width, placeholder="…")
-    return prefix + shortened
 
 
 def _perception_chart(
@@ -118,6 +102,13 @@ def _perception_chart(
         margin=dict(l=10, r=10, t=60, b=10),
         yaxis=dict(range=[0, 100]),
         showlegend=False,
+        title=dict(
+            text=title,
+            x=0.5,
+            y=0.95,
+            xanchor="center",
+            yanchor="top",
+        ),
     )
     fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=text_size, textposition="inside")
     return fig
@@ -301,7 +292,11 @@ else:
         st.subheader("Top Strength Comparison")
         charts: list[tuple[dict[str, object], go.Figure]] = []
         for record in strength_records:
-            chart_title = _compact_title(record["item"]["QuestionID"], record["item"]["QuestionText"])
+            question_id = record["item"].get("QuestionID")
+            if pd.notna(question_id):
+                chart_title = str(question_id).strip() or "Question"
+            else:
+                chart_title = "Question"
             fig = _perception_chart(
                 scores,
                 record["item"]["QuestionID"],
