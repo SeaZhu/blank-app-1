@@ -45,7 +45,13 @@ def _render_sidebar_legend() -> None:
         )
 
 
-def _compact_title(question_id: object, question_text: object, *, width: int = 58) -> str:
+def _compact_title(
+    question_id: object,
+    question_text: object,
+    *,
+    width: int = 58,
+    max_lines: int | None = 3,
+) -> str:
     base_text = ""
     if isinstance(question_text, str):
         base_text = question_text.strip()
@@ -57,8 +63,27 @@ def _compact_title(question_id: object, question_text: object, *, width: int = 5
         prefix = f"{str(question_id).strip()}. "
 
     available_width = max(width - len(prefix), 12)
-    shortened = textwrap.shorten(base_text, width=available_width, placeholder="…")
-    return prefix + shortened
+    wrapped_lines = textwrap.wrap(
+        base_text,
+        width=available_width,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+    if not wrapped_lines:
+        wrapped_lines = [base_text]
+
+    if max_lines is not None and len(wrapped_lines) > max_lines:
+        preserved = wrapped_lines[: max_lines - 1] if max_lines > 1 else []
+        remainder = " ".join(wrapped_lines[max_lines - 1 :])
+        shortened = textwrap.shorten(remainder, width=available_width, placeholder="…")
+        wrapped_lines = preserved + [shortened]
+
+    if wrapped_lines:
+        wrapped_lines[0] = prefix + wrapped_lines[0]
+    else:
+        wrapped_lines = [prefix.rstrip()]
+
+    return "<br>".join(wrapped_lines)
 
 
 def _perception_chart(
@@ -110,9 +135,17 @@ def _perception_chart(
     )
     fig.update_layout(
         height=height,
-        margin=dict(l=10, r=10, t=60, b=10),
+        margin=dict(l=10, r=10, t=90, b=10),
         yaxis=dict(range=[0, 100]),
         showlegend=False,
+        title=dict(
+            text=title,
+            x=0.5,
+            y=0.97,
+            xanchor="center",
+            yanchor="top",
+            pad=dict(t=20),
+        ),
     )
     fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=text_size, textposition="inside")
     return fig
@@ -267,7 +300,12 @@ else:
         st.subheader("Lowest Items Comparison")
         charts: list[tuple[dict[str, object], go.Figure]] = []
         for record in question_records:
-            chart_title = _compact_title(record["row"]["QuestionID"], record["row"]["QuestionText"])
+            chart_title = _compact_title(
+                record["row"]["QuestionID"],
+                record["row"]["QuestionText"],
+                width=44,
+                max_lines=None,
+            )
             fig = _perception_chart(
                 recent_scores,
                 record["row"]["QuestionID"],
