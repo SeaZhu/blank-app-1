@@ -1,6 +1,7 @@
 """Our Strength page."""
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Iterable
 
@@ -176,47 +177,37 @@ def _combined_perception_chart(
         melted["QuestionID"].astype(str)
     )
     year_labels = [str(year) for year in year_list]
-    question_labels = [label_map[qid] for qid in question_ids if qid in label_map]
-    melted["FYLabel"] = melted["FY"].astype(str)
-    melted = melted.rename(columns={"FYLabel": "Fiscal Year"})
-    melted["QuestionYear"] = [
-        f"{question}<br>{fy}"
-        for question, fy in zip(melted["QuestionLabel"], melted["Fiscal Year"])
-    ]
+    question_numbers = [str(qid).strip() for qid in question_ids]
 
-    available_positions = list(dict.fromkeys(melted["QuestionYear"].tolist()))
-    available_set = set(available_positions)
-    x_order: list[str] = []
-    for label in question_labels:
-        for year in year_labels:
-            candidate = f"{label}<br>{year}"
-            if candidate in available_set and candidate not in x_order:
-                x_order.append(candidate)
-    for candidate in available_positions:
-        if candidate not in x_order:
-            x_order.append(candidate)
-
-    melted["QuestionYear"] = pd.Categorical(
-        melted["QuestionYear"], categories=x_order, ordered=True
+    melted["Fiscal Year"] = melted["FY"].astype(str)
+    melted["QuestionNumber"] = melted["QuestionID"].apply(lambda q: str(q).strip())
+    melted["QuestionNumber"] = pd.Categorical(
+        melted["QuestionNumber"], categories=question_numbers, ordered=True
     )
     melted["Perception"] = pd.Categorical(
         melted["Perception"], categories=PERCEPTION_ORDER, ordered=True
     )
-    melted = melted.sort_values(["QuestionYear", "Perception"])
+    melted = melted.sort_values(["QuestionNumber", "Fiscal Year", "Perception"])
+
+    rows = max(1, math.ceil(len(question_numbers) / 3))
+    calculated_height = max(height, rows * 320)
 
     fig = px.bar(
         melted,
-        x="QuestionYear",
+        x="Fiscal Year",
         y="Percent",
         color="Perception",
         barmode="stack",
+        facet_col="QuestionNumber",
+        facet_col_wrap=3,
         color_discrete_map=COLOR_MAP,
         category_orders={
-            "QuestionYear": x_order,
+            "Fiscal Year": year_labels,
             "Perception": PERCEPTION_ORDER,
+            "QuestionNumber": question_numbers,
         },
         labels={
-            "QuestionYear": "Survey Item and Fiscal Year",
+            "Fiscal Year": "Fiscal Year",
             "Percent": "Percent of Responses",
         },
         hover_data={
@@ -225,15 +216,26 @@ def _combined_perception_chart(
             "Percent": ":.1f",
         },
     )
+
     fig.update_layout(
-        height=height,
-        margin=dict(l=10, r=10, t=60, b=60),
-        yaxis=dict(range=[0, 100], title="Percent of Responses"),
-        xaxis=dict(tickangle=-15, title=""),
+        height=calculated_height,
+        margin=dict(l=10, r=10, t=70, b=60),
         title=dict(text="Top Strength Comparison", x=0.5, xanchor="center"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        showlegend=False,
     )
+    fig.update_yaxes(range=[0, 100], title="Percent of Responses", matches="y")
+    fig.update_xaxes(title="Fiscal Year")
     fig.update_traces(texttemplate="%{y:.1f}%", textposition="inside", textfont_size=11)
+
+    fig.for_each_annotation(
+        lambda annotation: annotation.update(
+            text=annotation.text.split("=")[-1].strip(),
+            font=dict(size=16, color="#212529"),
+            y=1.08,
+            yanchor="bottom",
+        )
+    )
+
     return fig
 
 
