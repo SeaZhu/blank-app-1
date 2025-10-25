@@ -11,12 +11,14 @@ PLOTLY_CONFIG = {"displaylogo": False}
 
 from fevs_io import load_excel
 from fevs_processing import compute_question_scores, prepare_question_metadata
+from fevs_style import apply_global_styles
 
 
 st.set_page_config(
     page_title="Areas of Concern · FEVS-style Dashboard",
     layout="wide",
 )
+apply_global_styles()
 
 
 @st.cache_data(show_spinner=False)

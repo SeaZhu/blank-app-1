@@ -12,10 +12,12 @@ from fevs_calculations import (
     prepare_population_long,
     compute_index_value,
 )
+from fevs_style import apply_global_styles
 
 PLOTLY_CONFIG = {"displaylogo": False}
 
 st.set_page_config(page_title="Overview · FEVS-style Dashboard", layout="wide")
+apply_global_styles()
 st.title("Overview")
 
 # --------- Cached loaders/wrappers (UI layer) ---------

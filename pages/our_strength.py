@@ -11,12 +11,14 @@ import streamlit as st
 
 from fevs_io import load_excel
 from fevs_processing import compute_question_scores, prepare_question_metadata
+from fevs_style import apply_global_styles
 
 
 st.set_page_config(
     page_title="Our Strength · FEVS-style Dashboard",
     layout="wide",
 )
+apply_global_styles()
 
 
 PERCEPTION_ORDER = ["Positive", "Neutral", "Negative"]
@@ -111,6 +113,127 @@ def _perception_chart(
         ),
     )
     fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=text_size, textposition="inside")
+    return fig
+
+
+def _combined_perception_chart(
+    scores_df: pd.DataFrame,
+    records: Iterable[dict[str, object]],
+    *,
+    years: Iterable[int],
+    height: int = 420,
+) -> go.Figure | None:
+    record_list = [record for record in records]
+    if not record_list:
+        return None
+
+    items = [record.get("item", {}) for record in record_list]
+    if not items:
+        return None
+
+    question_ids: list[object] = []
+    label_map: dict[object, str] = {}
+    for record, item in zip(record_list, items):
+        qid = item.get("QuestionID")
+        if pd.isna(qid):
+            continue
+        question_ids.append(qid)
+        label_map[qid] = record.get("label", str(qid))
+
+    if not question_ids:
+        return None
+
+    year_list = list(years)
+    subset = scores_df[
+        (scores_df["QuestionID"].isin(question_ids)) & (scores_df["FY"].isin(year_list))
+    ]
+    if subset.empty:
+        return None
+
+    available_columns = [col for col in PERCEPTION_ORDER if col in subset.columns]
+    if not available_columns:
+        return None
+
+    subset = subset[["QuestionID", "FY"] + available_columns]
+    subset = subset.drop_duplicates(subset=["QuestionID", "FY"])
+    if subset.empty:
+        return None
+
+    melted = subset.melt(
+        id_vars=["QuestionID", "FY"],
+        value_vars=available_columns,
+        var_name="Perception",
+        value_name="Percent",
+    ).dropna(subset=["Percent"])
+
+    if melted.empty:
+        return None
+
+    melted = melted.copy()
+    melted["FY"] = melted["FY"].astype(int)
+    melted["Percent"] = melted["Percent"].astype(float).round(2)
+    melted["QuestionLabel"] = melted["QuestionID"].map(label_map).fillna(
+        melted["QuestionID"].astype(str)
+    )
+    year_labels = [str(year) for year in year_list]
+    question_labels = [label_map[qid] for qid in question_ids if qid in label_map]
+    melted["FYLabel"] = melted["FY"].astype(str)
+    melted = melted.rename(columns={"FYLabel": "Fiscal Year"})
+    melted["QuestionYear"] = [
+        f"{question}<br>{fy}"
+        for question, fy in zip(melted["QuestionLabel"], melted["Fiscal Year"])
+    ]
+
+    available_positions = list(dict.fromkeys(melted["QuestionYear"].tolist()))
+    available_set = set(available_positions)
+    x_order: list[str] = []
+    for label in question_labels:
+        for year in year_labels:
+            candidate = f"{label}<br>{year}"
+            if candidate in available_set and candidate not in x_order:
+                x_order.append(candidate)
+    for candidate in available_positions:
+        if candidate not in x_order:
+            x_order.append(candidate)
+
+    melted["QuestionYear"] = pd.Categorical(
+        melted["QuestionYear"], categories=x_order, ordered=True
+    )
+    melted["Perception"] = pd.Categorical(
+        melted["Perception"], categories=PERCEPTION_ORDER, ordered=True
+    )
+    melted = melted.sort_values(["QuestionYear", "Perception"])
+
+    fig = px.bar(
+        melted,
+        x="QuestionYear",
+        y="Percent",
+        color="Perception",
+        barmode="stack",
+        color_discrete_map=COLOR_MAP,
+        category_orders={
+            "QuestionYear": x_order,
+            "Perception": PERCEPTION_ORDER,
+        },
+        labels={
+            "QuestionYear": "Survey Item and Fiscal Year",
+            "Percent": "Percent of Responses",
+        },
+        hover_data={
+            "QuestionLabel": True,
+            "Fiscal Year": True,
+            "Percent": ":.1f",
+        },
+    )
+    fig.update_layout(
+        height=height,
+        margin=dict(l=10, r=10, t=60, b=60),
+        yaxis=dict(range=[0, 100], title="Percent of Responses"),
+        xaxis=dict(tickangle=-15, title=""),
+        title=dict(text="Top Strength Comparison", x=0.5, xanchor="center"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    fig.update_traces(texttemplate="%{y:.1f}%", textposition="inside", textfont_size=11)
     return fig
 
 
@@ -290,35 +413,26 @@ else:
 
     if selected_label == "All":
         st.subheader("Top Strength Comparison")
-        charts: list[tuple[dict[str, object], go.Figure]] = []
-        for record in strength_records:
-            question_id = record["item"].get("QuestionID")
-            if pd.notna(question_id):
-                chart_title = str(question_id).strip() or "Question"
-            else:
-                chart_title = "Question"
-            fig = _perception_chart(
-                scores,
-                record["item"]["QuestionID"],
-                years=years_to_show,
-                title=chart_title,
-                text_size=11,
-                height=360,
-            )
-            if fig is not None:
-                charts.append((record["item"], fig))
+        combined_fig = _combined_perception_chart(
+            scores,
+            strength_records,
+            years=years_to_show,
+        )
 
-        if not charts:
+        if combined_fig is None:
             st.info("Perception breakdown unavailable for the selected survey items.")
         else:
-            columns = st.columns(len(charts))
-            for column, (item, fig) in zip(columns, charts):
-                column.plotly_chart(fig, config=PLOTLY_CONFIG)
+            st.plotly_chart(combined_fig, config=PLOTLY_CONFIG, use_container_width=True)
+            summary_lines = []
+            for record in strength_records:
+                item = record["item"]
                 avg_positive = item.get("AveragePositive")
-                if avg_positive is not None:
-                    column.caption(f"3-Year Avg Positive: {avg_positive:.2f}%")
-                else:
-                    column.caption("3-Year Avg Positive: N/A")
+                avg_text = f"{avg_positive:.2f}%" if avg_positive is not None else "N/A"
+                summary_lines.append(
+                    f"- **{record['label']}** — 3-Year Avg Positive: {avg_text}"
+                )
+            if summary_lines:
+                st.markdown("\n".join(summary_lines))
     else:
         label_to_item = {record["label"]: record["item"] for record in strength_records}
         selected_item = label_to_item[selected_label]
