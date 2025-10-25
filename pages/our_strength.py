@@ -219,20 +219,24 @@ def _combined_perception_chart(
 
     fig.update_layout(
         height=calculated_height,
-        margin=dict(l=10, r=10, t=70, b=60),
-        title=dict(text="Top Strength Comparison", x=0.5, xanchor="center"),
+        margin=dict(l=10, r=10, t=40, b=60),
+        title=None,
         showlegend=False,
     )
     fig.update_yaxes(range=[0, 100], title="Percent of Responses", matches="y")
-    fig.update_xaxes(title="Fiscal Year")
+    fig.update_xaxes(
+        title_text="",
+        tickmode="array",
+        tickvals=year_labels,
+        ticktext=year_labels,
+        showticklabels=True,
+    )
     fig.update_traces(texttemplate="%{y:.1f}%", textposition="inside", textfont_size=11)
 
     fig.for_each_annotation(
         lambda annotation: annotation.update(
             text=annotation.text.split("=")[-1].strip(),
             font=dict(size=16, color="#212529"),
-            y=1.08,
-            yanchor="bottom",
         )
     )
 
@@ -414,7 +418,7 @@ else:
     _render_sidebar_legend()
 
     if selected_label == "All":
-        st.subheader("Top Strength Comparison")
+        st.subheader("Top Strength Items")
         combined_fig = _combined_perception_chart(
             scores,
             strength_records,
