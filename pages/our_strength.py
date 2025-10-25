@@ -190,7 +190,7 @@ def _combined_perception_chart(
     melted = melted.sort_values(["QuestionNumber", "Fiscal Year", "Perception"])
 
     rows = max(1, math.ceil(len(question_numbers) / 3))
-    calculated_height = max(height, rows * 320)
+    calculated_height = max(height, rows * 360)
 
     fig = px.bar(
         melted,
@@ -220,10 +220,10 @@ def _combined_perception_chart(
     fig.update_layout(
         height=calculated_height,
         margin=dict(l=10, r=10, t=40, b=60),
-        title=None,
+        title=dict(text=""),
         showlegend=False,
     )
-    fig.update_yaxes(range=[0, 100], title="Percent of Responses", matches="y")
+    fig.update_yaxes(range=[0, 100], title_text="", matches="y")
     fig.update_xaxes(
         title_text="",
         tickmode="array",
@@ -231,6 +231,16 @@ def _combined_perception_chart(
         ticktext=year_labels,
         showticklabels=True,
     )
+    fig.for_each_xaxis(
+        lambda axis: axis.update(
+            tickmode="array",
+            tickvals=year_labels,
+            ticktext=year_labels,
+            showticklabels=True,
+        )
+    )
+    for row_index in range(1, rows + 1):
+        fig.update_yaxes(title_text="Percent of Responses", row=row_index, col=1)
     fig.update_traces(texttemplate="%{y:.1f}%", textposition="inside", textfont_size=11)
 
     fig.for_each_annotation(
