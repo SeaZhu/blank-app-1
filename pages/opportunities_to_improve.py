@@ -1,6 +1,7 @@
 """Opportunities to Improve page."""
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Iterable
 
@@ -108,6 +109,142 @@ def _perception_chart(
         ),
     )
     fig.update_traces(texttemplate="%{y:.2f}%", textfont_size=text_size, textposition="inside")
+    return fig
+
+
+def _combined_perception_chart(
+    scores_df: pd.DataFrame,
+    records: Iterable[dict[str, object]],
+    *,
+    years: Iterable[int],
+    height: int = 420,
+) -> go.Figure | None:
+    record_list = [record for record in records]
+    if not record_list:
+        return None
+
+    items = [record.get("item", {}) for record in record_list]
+    if not items:
+        return None
+
+    question_ids: list[object] = []
+    label_map: dict[object, str] = {}
+    for record, item in zip(record_list, items):
+        qid = item.get("QuestionID")
+        if pd.isna(qid):
+            continue
+        question_ids.append(qid)
+        label_map[qid] = record.get("label", str(qid))
+
+    if not question_ids:
+        return None
+
+    year_list = list(years)
+    subset = scores_df[
+        (scores_df["QuestionID"].isin(question_ids)) & (scores_df["FY"].isin(year_list))
+    ]
+    if subset.empty:
+        return None
+
+    available_columns = [col for col in PERCEPTION_ORDER if col in subset.columns]
+    if not available_columns:
+        return None
+
+    subset = subset[["QuestionID", "FY"] + available_columns]
+    subset = subset.drop_duplicates(subset=["QuestionID", "FY"])
+    if subset.empty:
+        return None
+
+    melted = subset.melt(
+        id_vars=["QuestionID", "FY"],
+        value_vars=available_columns,
+        var_name="Perception",
+        value_name="Percent",
+    ).dropna(subset=["Percent"])
+
+    if melted.empty:
+        return None
+
+    melted = melted.copy()
+    melted["FY"] = melted["FY"].astype(int)
+    melted["Percent"] = melted["Percent"].astype(float).round(2)
+    melted["QuestionLabel"] = melted["QuestionID"].map(label_map).fillna(
+        melted["QuestionID"].astype(str)
+    )
+    year_labels = [str(year) for year in year_list]
+    question_numbers = [str(qid).strip() for qid in question_ids]
+
+    melted["Fiscal Year"] = melted["FY"].astype(str)
+    melted["QuestionNumber"] = melted["QuestionID"].apply(lambda q: str(q).strip())
+    melted["QuestionNumber"] = pd.Categorical(
+        melted["QuestionNumber"], categories=question_numbers, ordered=True
+    )
+    melted["Perception"] = pd.Categorical(
+        melted["Perception"], categories=PERCEPTION_ORDER, ordered=True
+    )
+    melted = melted.sort_values(["QuestionNumber", "Fiscal Year", "Perception"])
+
+    rows = max(1, math.ceil(len(question_numbers) / 3))
+    calculated_height = max(height, rows * 360)
+
+    fig = px.bar(
+        melted,
+        x="Fiscal Year",
+        y="Percent",
+        color="Perception",
+        barmode="stack",
+        facet_col="QuestionNumber",
+        facet_col_wrap=3,
+        color_discrete_map=COLOR_MAP,
+        category_orders={
+            "Fiscal Year": year_labels,
+            "Perception": PERCEPTION_ORDER,
+            "QuestionNumber": question_numbers,
+        },
+        labels={
+            "Fiscal Year": "Fiscal Year",
+            "Percent": "Percent of Responses",
+        },
+        hover_data={
+            "QuestionLabel": True,
+            "Fiscal Year": True,
+            "Percent": ":.1f",
+        },
+    )
+
+    fig.update_layout(
+        height=calculated_height,
+        margin=dict(l=10, r=10, t=40, b=60),
+        title=dict(text=""),
+        showlegend=False,
+    )
+    fig.update_yaxes(range=[0, 100], title_text="", matches="y")
+    fig.update_xaxes(
+        title_text="",
+        tickmode="array",
+        tickvals=year_labels,
+        ticktext=year_labels,
+        showticklabels=True,
+    )
+    fig.for_each_xaxis(
+        lambda axis: axis.update(
+            tickmode="array",
+            tickvals=year_labels,
+            ticktext=year_labels,
+            showticklabels=True,
+        )
+    )
+    for row_index in range(1, rows + 1):
+        fig.update_yaxes(title_text="Percent of Responses", row=row_index, col=1)
+    fig.update_traces(texttemplate="%{y:.1f}%", textposition="inside", textfont_size=11)
+
+    fig.for_each_annotation(
+        lambda annotation: annotation.update(
+            text=annotation.text.split("=")[-1].strip(),
+            font=dict(size=16, color="#212529"),
+        )
+    )
+
     return fig
 
 
@@ -244,6 +381,7 @@ question_records = [
     {
         "label": _format_question_text(row["QuestionID"], row["QuestionText"]),
         "row": row,
+        "item": {"QuestionID": row["QuestionID"]},
     }
     for row in lowest_five.to_dict("records")
 ]
@@ -258,35 +396,26 @@ else:
 
     if selected_label == "All":
         st.subheader("Lowest Items Comparison")
-        charts: list[tuple[dict[str, object], go.Figure]] = []
-        for record in question_records:
-            question_id = record["row"].get("QuestionID")
-            if pd.notna(question_id):
-                chart_title = str(question_id).strip() or "Question"
-            else:
-                chart_title = "Question"
-            fig = _perception_chart(
-                recent_scores,
-                record["row"]["QuestionID"],
-                years=years_to_show,
-                title=chart_title,
-                text_size=11,
-                height=360,
-            )
-            if fig is not None:
-                charts.append((record["row"], fig))
+        combined_fig = _combined_perception_chart(
+            recent_scores,
+            question_records,
+            years=years_to_show,
+        )
 
-        if not charts:
+        if combined_fig is None:
             st.info("Perception breakdown unavailable for the selected survey items.")
         else:
-            columns = st.columns(len(charts))
-            for column, (row, fig) in zip(columns, charts):
-                column.plotly_chart(fig, config=PLOTLY_CONFIG)
+            st.plotly_chart(combined_fig, config=PLOTLY_CONFIG, use_container_width=True)
+            summary_lines = []
+            for record in question_records:
+                row = record["row"]
                 avg_positive = row.get("ThreeYearAverage")
-                if pd.notna(avg_positive):
-                    column.caption(f"3-Year Avg Positive: {avg_positive:.2f}%")
-                else:
-                    column.caption("3-Year Avg Positive: N/A")
+                avg_text = f"{avg_positive:.2f}%" if pd.notna(avg_positive) else "N/A"
+                summary_lines.append(
+                    f"- **{record['label']}** — 3-Year Avg Positive: {avg_text}"
+                )
+            if summary_lines:
+                st.markdown("\n".join(summary_lines))
     else:
         label_to_row = {record["label"]: record["row"] for record in question_records}
         selected_row = label_to_row[selected_label]
